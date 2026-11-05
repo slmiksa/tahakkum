@@ -1,0 +1,6 @@
+# Bash cannot run a script with Windows line endings, wherever it was checked out.
+*.sh text eol=lf
+*.exe binary
+*.zip binary
+*.png binary
+*.ico binary

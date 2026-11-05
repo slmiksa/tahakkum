@@ -1,0 +1,21 @@
+# The desktop program has no Supabase account, so these two take no user token.
+# They are safe to expose: each one requires a valid code or a device secret.
+[functions.activate]
+verify_jwt = false
+
+[functions.refresh]
+verify_jwt = false
+
+# The database checks the caller's token itself, and refuses anyone who is not an admin with MFA.
+[functions.issue-batch]
+verify_jwt = false
+
+[functions.export-batch]
+verify_jwt = false
+
+[auth]
+enable_signup = false
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true

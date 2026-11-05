@@ -1,0 +1,5 @@
+node_modules/
+.claude/
+# The license signing key. Anyone holding it can create valid licenses.
+supabase-backend/secrets/
+supabase-backend/supabase/.temp/

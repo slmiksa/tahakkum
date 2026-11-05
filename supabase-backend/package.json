@@ -1,0 +1,14 @@
+{
+  "name": "tahakkum-licensing",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/licensing.test.ts",
+    "dev-server": "node tests/dev-server.ts"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.3.15",
+    "@supabase/supabase-js": "2.80.0",
+    "supabase": "3.0.0"
+  }
+}
