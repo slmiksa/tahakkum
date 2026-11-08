@@ -15,11 +15,17 @@ The root `README.md` (Arabic) maps the folders. This file is the working knowled
 | `release` | What gets handed over: client zip, dashboard zip, two Linux installers | Built by `package-release.ps1` |
 | `brand` | Original logo and palette images | Reference only |
 
-GitHub: private repo `slmiksa/tahakkum`. Push only when the owner asks ("ارفع التحديثات").
+GitHub: private repo `slmiksa/tahakkum`. Push only when the owner asks ("ارفع التحديثات"). The owner works from more than one computer: at the start of a session, if the owner says they changed machines or asks to pull, run `git pull` before editing anything, and never clone the repository inside itself.
 
 ## Secrets: never in git
 
-`supabase-backend/secrets/` holds `license-signing-key.json` (ECDSA P-256 private key that signs licenses) and `functions.env` (`LICENSE_SIGNING_KEY`, `CODES_KEY` for encrypting stored codes). Ignored by `.gitignore`. On a new machine the owner copies this folder by hand. Without it, Edge Functions cannot be redeployed with the same keys, and replacing the signing key invalidates every license issued.
+`supabase-backend/secrets/` holds `license-signing-key.json` (ECDSA P-256 private key that signs licenses) and `functions.env` (`LICENSE_SIGNING_KEY`, `CODES_KEY` for encrypting stored codes). The folder itself is ignored by `.gitignore`. Without it, Edge Functions cannot be redeployed with the same keys, and replacing the signing key invalidates every license issued.
+
+The repository carries it encrypted instead: `supabase-backend/secrets.enc` (zip, AES-256-CBC + HMAC-SHA256, keys from PBKDF2-SHA256 with 600,000 iterations). Only the owner knows the password; never ask for it in chat. On a new machine, when the owner asks to restore the secrets, give them this to run in their own terminal, where they type the password:
+
+`powershell -ExecutionPolicy Bypass -File .\supabase-backend\tools\secrets-unlock.ps1`
+
+After the keys change (for example a new `CODES_KEY`), re-encrypt with `tools\secrets-lock.ps1`, again run by the owner, and push the new `secrets.enc`.
 
 Server-side, also not in git: `/etc/tahakkum-relay` (relay certificate, pinned in the program) and `/var/lib/tahakkum-relay/ids.txt` (device ID registry).
 

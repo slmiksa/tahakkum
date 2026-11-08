@@ -1,4 +1,0 @@
-node_modules/
-.temp/
-# The license signing key. Anyone holding it can create valid licenses.
-secrets/
