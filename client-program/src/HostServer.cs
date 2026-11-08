@@ -76,6 +76,8 @@ namespace Tahakkum
 
         public readonly string Code;
         public readonly ControlDesk Desk = new ControlDesk();
+        // Set by the UI when the lock-screen service is installed; null otherwise.
+        public LockScreenLink Lock;
         public event Action<ConsentRequest> ConsentNeeded;
         public event Action<HostSession> SessionStarted;
         public event Action<HostSession> SessionEnded;
@@ -317,7 +319,7 @@ namespace Tahakkum
                 AppFiles.Log((byPassword ? "بدأت جلسة تحكم بكلمة السر من " : "بدأت جلسة تحكم من ") + ip + " (" + (nick.Length > 0 ? nick + "، " : "") + user + "@" + machine + ")");
                 conn.MaxIncoming = Proto.MaxFromViewer;
                 conn.SetTimeouts(15000, 15000);
-                HostSession session = new HostSession(conn, ip, machine, user, nick, Desk);
+                HostSession session = new HostSession(conn, ip, machine, user, nick, Desk, byPassword, Lock);
                 Action<HostSession> started = SessionStarted;
                 if (started != null) started(session);
                 try
@@ -364,11 +366,17 @@ namespace Tahakkum
         public readonly string Nick;
         public readonly FileTransferService Files;
         readonly ControlDesk desk;
+        // Only a password-authenticated viewer may reach the secure (lock) screen, through the agent.
+        readonly bool byPassword;
+        readonly LockScreenLink lockLink;
+        Action<byte[]> onLockInfo;
+        Action<byte[]> onLockFrame;
 
         volatile bool stopping;
         volatile bool hasControl;
         volatile bool paused;
         volatile bool locked;
+        volatile bool secureRelay;
         volatile int qualityMode;
         volatile int requestedMonitor = -1;
         volatile bool displaysChanged;
@@ -377,10 +385,12 @@ namespace Tahakkum
 
         public event Action<string> ClipboardFromViewer;
 
-        public HostSession(Connection conn, string ip, string machine, string user, string nick, ControlDesk desk)
+        public HostSession(Connection conn, string ip, string machine, string user, string nick, ControlDesk desk, bool byPassword, LockScreenLink lockLink)
         {
             this.conn = conn;
             this.desk = desk;
+            this.byPassword = byPassword;
+            this.lockLink = lockLink;
             RemoteIp = ip;
             Machine = machine;
             User = user;
@@ -449,12 +459,40 @@ namespace Tahakkum
             }
             finally
             {
+                ExitSecure();
                 desk.Leave(this);
                 hasControl = false;
                 injector.ReleaseAll();
                 conn.Close();
                 Files.Shutdown();
             }
+        }
+
+        // Start relaying the agent's secure-desktop frames to this viewer. Idempotent.
+        void EnterSecure()
+        {
+            if (secureRelay) return;
+            secureRelay = true;
+            onLockInfo = p => { try { conn.Send(Msg.ScreenInfo, p); } catch (Exception) { } };
+            onLockFrame = p => { try { conn.Send(Msg.Frame, p); } catch (Exception) { } };
+            lockLink.ScreenInfoReceived += onLockInfo;
+            lockLink.FrameReceived += onLockFrame;
+            conn.Send(Msg.Status, new[] { (byte)HostStatus.Normal });
+            byte[] info = lockLink.LastScreenInfo;
+            if (info != null) conn.Send(Msg.ScreenInfo, info);
+        }
+
+        void ExitSecure()
+        {
+            if (!secureRelay) return;
+            secureRelay = false;
+            if (lockLink != null)
+            {
+                if (onLockInfo != null) lockLink.ScreenInfoReceived -= onLockInfo;
+                if (onLockFrame != null) lockLink.FrameReceived -= onLockFrame;
+            }
+            onLockInfo = null;
+            onLockFrame = null;
         }
 
         void OnMessage(Msg type, byte[] data)
@@ -494,28 +532,46 @@ namespace Tahakkum
                 }
 
                 // Only the viewer holding control drives this machine; the others watch.
-                if (paused || locked || stopping || !hasControl) return;
+                if (stopping || paused || !hasControl) return;
+                // When locked, input goes to the secure desktop through the agent, or nowhere.
+                bool secureInput = secureRelay && lockLink != null;
+                if (locked && !secureInput) return;
                 switch (type)
                 {
                     case Msg.MouseMove:
-                        injector.Move(r.ReadInt32(), r.ReadInt32());
+                    {
+                        int x = r.ReadInt32(), y = r.ReadInt32();
+                        if (secureInput) lockLink.SendInput(Pack.Build(w => { w.Write(LockMsg.InMove); w.Write(x); w.Write(y); }));
+                        else injector.Move(x, y);
                         break;
+                    }
                     case Msg.MouseButton:
-                        int button = r.ReadByte();
+                    {
+                        byte button = r.ReadByte();
                         bool down = r.ReadBoolean();
-                        injector.Move(r.ReadInt32(), r.ReadInt32());
-                        injector.Button(button, down);
+                        int x = r.ReadInt32(), y = r.ReadInt32();
+                        if (secureInput) lockLink.SendInput(Pack.Build(w => { w.Write(LockMsg.InButton); w.Write(button); w.Write(down); w.Write(x); w.Write(y); }));
+                        else { injector.Move(x, y); injector.Button(button, down); }
                         break;
+                    }
                     case Msg.MouseWheel:
+                    {
                         int delta = r.ReadInt32();
-                        injector.Wheel(delta, r.ReadBoolean());
+                        bool horizontal = r.ReadBoolean();
+                        if (secureInput) lockLink.SendInput(Pack.Build(w => { w.Write(LockMsg.InWheel); w.Write(delta); w.Write(horizontal); }));
+                        else injector.Wheel(delta, horizontal);
                         break;
+                    }
                     case Msg.Key:
+                    {
                         int vk = r.ReadInt32();
                         int scan = r.ReadInt32();
                         bool extended = r.ReadBoolean();
-                        injector.Key(vk, scan, extended, r.ReadBoolean());
+                        bool kdown = r.ReadBoolean();
+                        if (secureInput) lockLink.SendInput(Pack.Build(w => { w.Write(LockMsg.InKey); w.Write(vk); w.Write(scan); w.Write(extended); w.Write(kdown); }));
+                        else injector.Key(vk, scan, extended, kdown);
                         break;
+                    }
                 }
             }
         }
@@ -594,13 +650,18 @@ namespace Tahakkum
                         {
                             locked = !reachable;
                             if (locked) injector.ReleaseAll();
+                            else ExitSecure();
                             conn.Send(Msg.Status, new[] { (byte)(locked ? HostStatus.Locked : HostStatus.Normal) });
                             force = true;
                         }
                     }
                     if (locked)
                     {
-                        Thread.Sleep(200);
+                        // While locked, a password-authenticated viewer sees and drives the secure
+                        // desktop through the SYSTEM agent; everyone else just sees the locked notice.
+                        bool secure = byPassword && lockLink != null && lockLink.SecureActive;
+                        if (secure) EnterSecure(); else ExitSecure();
+                        Thread.Sleep(secure ? 120 : 200);
                         continue;
                     }
 

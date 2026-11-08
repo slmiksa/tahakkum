@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace Tahakkum
 {
-    static class Native
+    static partial class Native
     {
         public const int SRCCOPY = 0x00CC0020;
         public const int CAPTUREBLT = 0x40000000;
@@ -161,6 +161,7 @@ namespace Tahakkum
         [DllImport("gdi32.dll")] public static extern IntPtr CreateDIBSection(IntPtr hdc, ref BITMAPINFOHEADER bmi, uint usage, out IntPtr bits, IntPtr section, uint offset);
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr GetModuleHandle(string name);
+        [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);
         [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
     }
 }

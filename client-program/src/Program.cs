@@ -16,6 +16,16 @@ namespace Tahakkum
         [STAThread]
         static void Main(string[] args)
         {
+            // The lock-screen helper runs as the service or the SYSTEM agent, with no window.
+            if (args.Length > 0)
+            {
+                string verb = args[0].ToLowerInvariant();
+                if (verb == "/lockservice") { System.ServiceProcess.ServiceBase.Run(new LockService()); return; }
+                if (verb == "/lockagent") { LockAgent.Run(); return; }
+                if (verb == "/installlock") { Environment.Exit(LockInstall.RunInstall()); }
+                if (verb == "/removelock") { Environment.Exit(LockInstall.RunRemove()); }
+            }
+
             try { Native.SetProcessDpiAwarenessContext(new IntPtr(-4)); }
             catch (Exception) { Native.SetProcessDPIAware(); }
 

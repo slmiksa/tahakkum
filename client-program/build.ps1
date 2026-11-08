@@ -48,7 +48,7 @@ foreach ($img in $images) { $out.Write($img) }
 $out.Close()
 
 $sources = Get-ChildItem (Join-Path $root 'src') -Filter *.cs | ForEach-Object { '"' + $_.FullName + '"' }
-$refs = 'System.dll', 'System.Core.dll', 'System.Drawing.dll', 'System.Windows.Forms.dll', 'System.Security.dll', 'System.Xml.dll', 'System.Runtime.Serialization.dll' | ForEach-Object { '/r:"' + (Join-Path $fx $_) + '"' }
+$refs = 'System.dll', 'System.Core.dll', 'System.Drawing.dll', 'System.Windows.Forms.dll', 'System.Security.dll', 'System.Xml.dll', 'System.Runtime.Serialization.dll', 'System.ServiceProcess.dll' | ForEach-Object { '/r:"' + (Join-Path $fx $_) + '"' }
 $rsp = Join-Path $dist 'build.rsp'
 $lines = @(
     '/nologo', '/noconfig', '/nostdlib-', '/target:winexe', '/platform:anycpu', '/optimize+', '/unsafe', '/codepage:65001',

@@ -11,6 +11,8 @@ namespace Tahakkum
         readonly AddressBox first = new AddressBox();
         readonly AddressBox second = new AddressBox();
         readonly Label error;
+        readonly Label lockStatus;
+        readonly PillButton lockButton;
 
         public AccessPasswordForm()
         {
@@ -21,7 +23,7 @@ namespace Tahakkum
             StartPosition = FormStartPosition.CenterParent;
             BackColor = Theme.Bg;
             RightToLeft = RightToLeft.Yes;
-            ClientSize = new Size(Theme.S(460), Theme.S(416));
+            ClientSize = new Size(Theme.S(460), Theme.S(620));
             Icon = Program.AppIcon;
 
             int w = ClientSize.Width;
@@ -62,6 +64,70 @@ namespace Tahakkum
             Controls.Add(cancel);
             CancelButton = cancel;
             AcceptButton = save;
+
+            // ---- Lock-screen access (unattended sign-in through the SYSTEM service) ----
+            Panel line = new Panel { BackColor = Theme.CardRaised };
+            line.SetBounds(m, Theme.S(410), w - 2 * m, 1);
+            Controls.Add(line);
+
+            Label lockTitle = Theme.MakeLabel("الوصول إلى شاشة القفل (ويندوز + L)", Theme.UiBold(11.5f), Theme.Text, ContentAlignment.MiddleRight);
+            lockTitle.SetBounds(m, Theme.S(424), w - 2 * m, Theme.S(26));
+            Controls.Add(lockTitle);
+
+            Label lockNote = Theme.MakeLabel("تثبيت خدمة تتيح لمن يعرف كلمة السر الدخول حتى والجهاز مقفول بويندوز+L. يحتاج صلاحية مسؤول مرة واحدة. الدخول من شاشة القفل يكون بكلمة السر فقط. ثبّت البرنامج في مجلد محمي (مثل Program Files) قبل التفعيل.", Theme.Ui(9.5f), Theme.Muted, ContentAlignment.TopRight);
+            lockNote.SetBounds(m, Theme.S(454), w - 2 * m, Theme.S(86));
+            Controls.Add(lockNote);
+
+            lockStatus = Theme.MakeLabel("", Theme.Ui(9.5f), Theme.Muted, ContentAlignment.MiddleRight);
+            lockStatus.SetBounds(m, Theme.S(548), w - 2 * m - Theme.S(150), Theme.S(46));
+            Controls.Add(lockStatus);
+
+            lockButton = new PillButton { Kind = ButtonKind.Secondary, Glyph = Theme.GlyphShield, GlyphSize = 10f };
+            lockButton.Font = Theme.UiBold(9f);
+            lockButton.SetBounds(w - m - Theme.S(140), Theme.S(548), Theme.S(140), Theme.S(46));
+            lockButton.Click += delegate { ToggleLock(); };
+            Controls.Add(lockButton);
+            RefreshLock();
+        }
+
+        void RefreshLock()
+        {
+            bool installed = LockInstall.IsInstalled();
+            lockButton.Text = installed ? "إزالة الخدمة" : "تثبيت الخدمة";
+            if (installed)
+                lockStatus.Text = AccessPassword.IsSet ? "مفعّلة: يمكن الدخول من شاشة القفل بكلمة السر." : "مثبّتة، لكن عيّن كلمة السر أعلاه لتعمل.";
+            else
+                lockStatus.Text = "غير مفعّلة: الجهاز المقفول لا يُفتح عن بُعد.";
+        }
+
+        void ToggleLock()
+        {
+            bool installed = LockInstall.IsInstalled();
+            if (!installed && IsUnderUserProfile())
+            {
+                DialogResult go = MessageBox.Show(this,
+                    "البرنامج يعمل من مجلد يستطيع المستخدم تعديله، وهذا غير آمن لخدمة تعمل بصلاحيات النظام. يُفضّل نقله إلى مجلد محمي مثل Program Files أولاً. أتريد المتابعة رغم ذلك؟",
+                    "تنبيه أمني", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (go != DialogResult.Yes) return;
+            }
+            lockButton.Enabled = false;
+            lockButton.Text = "جارٍ…";
+            bool ok = LockInstall.RequestElevated(installed ? "/removelock" : "/installlock");
+            lockButton.Enabled = true;
+            RefreshLock();
+            if (!ok)
+                MessageBox.Show(this, installed ? "تعذّرت إزالة الخدمة." : "تعذّر تثبيت الخدمة. تأكد من الموافقة على طلب صلاحية المسؤول.",
+                    "تحكّم", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        static bool IsUnderUserProfile()
+        {
+            try
+            {
+                string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                return Application.ExecutablePath.StartsWith(profile, StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception) { return false; }
         }
 
         void AddField(AddressBox box, string caption, int top)

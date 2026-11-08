@@ -44,6 +44,7 @@ namespace Tahakkum
         readonly NotifyIcon tray = new NotifyIcon();
         readonly Label tileTitle;
         readonly ToggleSwitch internetToggle;
+        readonly ToggleSwitch keepAwakeToggle;
         readonly PillButton passwordButton;
         readonly RelayLink relay;
         readonly Label licenseState;
@@ -56,6 +57,7 @@ namespace Tahakkum
         readonly PillButton nameButton;
         readonly PillButton networkTab;
         readonly DiscoveryResponder discovery;
+        readonly LockScreenLink lockLink;
         SessionBar sessionBar;
         ClipboardSync hostClipboard;
         int scanGeneration;
@@ -206,22 +208,25 @@ namespace Tahakkum
             autostart.CheckedChanged += delegate { SetAutostart(autostart.Checked); };
             hostCard.Controls.Add(At(autostart, p, Theme.S(288), inner, Theme.S(36)));
 
+            keepAwakeToggle = new ToggleSwitch { Text = "منع السكون أثناء الاستقبال" };
+            hostCard.Controls.Add(At(keepAwakeToggle, p, Theme.S(322), inner, Theme.S(36)));
+
             firewallState = Theme.MakeLabel("الجدار الناري: جاري الفحص…", Theme.Ui(10f), Theme.Text, ContentAlignment.MiddleRight);
-            hostCard.Controls.Add(At(firewallState, p + Theme.S(130), Theme.S(324), inner - Theme.S(130), Theme.S(40)));
+            hostCard.Controls.Add(At(firewallState, p + Theme.S(130), Theme.S(358), inner - Theme.S(130), Theme.S(40)));
             firewallButton = new PillButton { Text = "السماح", Glyph = Theme.GlyphShield, GlyphSize = 10f };
             firewallButton.Font = Theme.UiBold(9f);
-            firewallButton.SetBounds(p, Theme.S(328), Theme.S(120), Theme.S(34));
+            firewallButton.SetBounds(p, Theme.S(362), Theme.S(120), Theme.S(34));
             firewallButton.Visible = false;
             firewallButton.Click += delegate { AddFirewallRule(); };
             hostCard.Controls.Add(firewallButton);
 
             passwordButton = new PillButton { Glyph = Theme.GlyphShield, GlyphSize = 10f };
             passwordButton.Font = Theme.UiBold(9f);
-            passwordButton.SetBounds(p, Theme.S(370), inner, Theme.S(38));
+            passwordButton.SetBounds(p, Theme.S(404), inner, Theme.S(38));
             passwordButton.Click += delegate { OpenPassword(); };
             hostCard.Controls.Add(passwordButton);
 
-            int bottomY = Theme.S(416);
+            int bottomY = Theme.S(448);
             int half = (inner - Theme.S(10)) / 2;
             PillButton logButton = new PillButton { Text = "سجل الجلسات", Glyph = Theme.GlyphHistory, GlyphSize = 10f };
             logButton.Font = Theme.UiBold(9f);
@@ -238,19 +243,23 @@ namespace Tahakkum
 
             nameButton = new PillButton { Kind = ButtonKind.Secondary, Glyph = Theme.GlyphEdit, GlyphSize = 9f };
             nameButton.Font = Theme.UiBold(9f);
-            nameButton.SetBounds(p, Theme.S(462), inner, Theme.S(38));
+            nameButton.SetBounds(p, Theme.S(490), inner, Theme.S(38));
             nameButton.Click += delegate { EditDisplayName(); };
             hostCard.Controls.Add(nameButton);
             RefreshNameButton();
 
             hostToggle.Checked = server != null;
             hostToggle.Enabled = server != null;
-            hostToggle.CheckedChanged += delegate { ApplyHostToggle(); ApplyInternet(); };
+            hostToggle.CheckedChanged += delegate { ApplyHostToggle(); ApplyInternet(); ApplyKeepAwake(); ApplyLockAccess(); };
 
             passwordButton.Enabled = server != null;
             internetToggle.Enabled = server != null && RelayConfig.Load() != null;
             internetToggle.Checked = internetToggle.Enabled && System.IO.File.Exists(InternetFlagPath);
             internetToggle.CheckedChanged += delegate { SaveInternetFlag(); ApplyInternet(); };
+
+            keepAwakeToggle.Enabled = server != null;
+            keepAwakeToggle.Checked = server != null && System.IO.File.Exists(KeepAwakeFlagPath);
+            keepAwakeToggle.CheckedChanged += delegate { SaveKeepAwakeFlag(); ApplyKeepAwake(); };
 
             if (server != null)
             {
@@ -265,6 +274,8 @@ namespace Tahakkum
                     if (hostSessions.Count > 0) UpdateHostState();
                 });
                 discovery = new DiscoveryResponder(Proto.DiscoveryPort, DescribeThisMachine);
+                lockLink = new LockScreenLink();
+                server.Lock = lockLink;
             }
 
             SetupTray();
@@ -272,12 +283,14 @@ namespace Tahakkum
             RefreshRecent();
             ApplyHostToggle();
             ApplyInternet();
+            ApplyKeepAwake();
+            ApplyLockAccess();
             RefreshPasswordButton();
             CheckFirewallAsync();
 
             LicenseManager.Changed += OnLicenseChanged;
             licenseTimer = new System.Windows.Forms.Timer { Interval = 60 * 1000 };
-            licenseTimer.Tick += delegate { RefreshLicense(); };
+            licenseTimer.Tick += delegate { RefreshLicense(); KeepAwake.Reassert(); };
             licenseTimer.Start();
             RefreshLicense();
 
@@ -373,6 +386,7 @@ namespace Tahakkum
         }
 
         static string InternetFlagPath { get { return System.IO.Path.Combine(AppFiles.Dir, "internet.on"); } }
+        static string KeepAwakeFlagPath { get { return System.IO.Path.Combine(AppFiles.Dir, "awake.on"); } }
 
         void SaveInternetFlag()
         {
@@ -382,6 +396,31 @@ namespace Tahakkum
                 else System.IO.File.Delete(InternetFlagPath);
             }
             catch (Exception) { }
+        }
+
+        void SaveKeepAwakeFlag()
+        {
+            try
+            {
+                if (keepAwakeToggle.Checked) System.IO.File.WriteAllText(KeepAwakeFlagPath, "1");
+                else System.IO.File.Delete(KeepAwakeFlagPath);
+            }
+            catch (Exception) { }
+        }
+
+        // Hold off sleep only while actually hosting with the option on, so a laptop that is not
+        // receiving still sleeps normally.
+        void ApplyKeepAwake()
+        {
+            KeepAwake.Set(server != null && hostToggle.Checked && keepAwakeToggle.Checked);
+        }
+
+        // Host the pipe for the secure-desktop agent only while hosting and the service is installed.
+        void ApplyLockAccess()
+        {
+            if (lockLink == null) return;
+            if (hostToggle.Checked && LockInstall.IsInstalled()) lockLink.Start();
+            else lockLink.Stop();
         }
 
         void ApplyInternet()
@@ -452,6 +491,7 @@ namespace Tahakkum
             }
             using (AccessPasswordForm form = new AccessPasswordForm()) form.ShowDialog(this);
             RefreshPasswordButton();
+            ApplyLockAccess();
         }
 
         void CopyAddress()
@@ -1095,6 +1135,8 @@ namespace Tahakkum
             licenseTimer.Stop();
             licenseTimer.Dispose();
             EndAllHostSessions();
+            KeepAwake.Set(false);
+            if (lockLink != null) lockLink.Stop();
             if (discovery != null) discovery.Stop();
             if (relay != null) relay.Stop();
             if (server != null) server.Stop();
