@@ -13,6 +13,8 @@ namespace Tahakkum
         SetQuality = 13, Clipboard = 14, Ping = 15, Pong = 16, Status = 17, Bye = 18,
         FileOffer = 19, FileAnswer = 20, FileData = 21, FileAck = 22, FileCancel = 23,
         AuthChallenge = 24, AuthProof = 25, AskConsent = 26,
+        // Several viewers can watch one machine; one of them drives it at a time.
+        ControlRequest = 27, ControlState = 28,
         // Between a program and the relay server, outside the end-to-end encrypted session.
         RelayRegister = 40, RelayChallenge = 41, RelayProof = 42, RelayRegistered = 43, RelayIncoming = 44,
         RelayAccept = 45, RelayDial = 46, RelayGo = 47, RelayOffline = 48, RelayPing = 49, RelayPong = 50, RelayRefused = 51
@@ -36,6 +38,8 @@ namespace Tahakkum
         public const string RelaySignLabel = "tahakkum-relay-v1";
         public const string DeviceIdPattern = @"^\d{9}$";
         public const int PasswordAttemptsPerConnection = 3;
+        public const int MaxViewers = 4;
+        public const int DiscoveryPort = 47801;
 
         // What a host signs to prove to the relay server that it owns its certificate.
         public static byte[] RelaySigned(byte[] nonce)

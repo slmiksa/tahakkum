@@ -111,6 +111,69 @@ namespace Tahakkum
         }
     }
 
+    // The name this person shows to support staff on the network and when they connect.
+    sealed class DisplayNameForm : Form
+    {
+        readonly AddressBox nameBox = new AddressBox();
+
+        public DisplayNameForm()
+        {
+            Text = "اسمك الظاهر";
+            FormBorderStyle = FormBorderStyle.FixedSingle;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            StartPosition = FormStartPosition.CenterParent;
+            BackColor = Theme.Bg;
+            RightToLeft = RightToLeft.Yes;
+            ClientSize = new Size(Theme.S(440), Theme.S(290));
+            Icon = Program.AppIcon;
+
+            int w = ClientSize.Width;
+            int m = Theme.S(24);
+
+            Label title = Theme.MakeLabel("اسمك كما يراه الدعم الفني", Theme.UiBold(13f), Theme.Text, ContentAlignment.MiddleRight);
+            title.SetBounds(m, Theme.S(16), w - 2 * m, Theme.S(30));
+            Controls.Add(title);
+
+            Label note = Theme.MakeLabel("يظهر في قائمة \"في الشبكة\" عند من يبحث عن جهازك، وعند من تتصل به. اكتب اسمك أو اسم قسمك، مثل: سالم - المحاسبة.", Theme.Ui(9.5f), Theme.Muted, ContentAlignment.TopRight);
+            note.SetBounds(m, Theme.S(50), w - 2 * m, Theme.S(48));
+            Controls.Add(note);
+
+            nameBox.SetBounds(m, Theme.S(110), w - 2 * m, Theme.S(52));
+            nameBox.Box.Font = Theme.UiBold(13f);
+            nameBox.Box.MaxLength = Profile.MaxName;
+            nameBox.Box.Text = Profile.DisplayName;
+            nameBox.Box.AccessibleName = "الاسم الظاهر";
+            Controls.Add(nameBox);
+
+            int bw = (w - 2 * m - Theme.S(12)) / 2;
+            PillButton save = new PillButton { Text = "حفظ", Kind = ButtonKind.Primary, Glyph = Theme.GlyphCheck };
+            save.SetBounds(w - m - bw, Theme.S(214), bw, Theme.S(50));
+            save.Click += delegate
+            {
+                try { Profile.DisplayName = nameBox.Box.Text; }
+                catch (Exception ex) { AppFiles.Log("تعذر حفظ الاسم الظاهر: " + ex.Message); }
+                DialogResult = DialogResult.OK;
+            };
+            Controls.Add(save);
+
+            PillButton cancel = new PillButton { Text = "إلغاء", Kind = ButtonKind.Secondary };
+            cancel.SetBounds(m, Theme.S(214), bw, Theme.S(50));
+            cancel.Click += delegate { Close(); };
+            Controls.Add(cancel);
+            CancelButton = cancel;
+            AcceptButton = save;
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            Theme.DarkTitleBar(Handle);
+            nameBox.Box.Focus();
+            nameBox.Box.SelectAll();
+        }
+    }
+
     // Adds or edits one entry of the saved address list.
     sealed class ContactForm : Form
     {
@@ -119,7 +182,7 @@ namespace Tahakkum
         readonly Label error;
         readonly string replacing;
 
-        public ContactForm(Contact existing, string address)
+        public ContactForm(Contact existing, string address, string suggestedName = null)
         {
             replacing = existing != null ? existing.Address : null;
             Text = existing != null ? "تعديل عنوان" : "إضافة عنوان";
@@ -137,7 +200,7 @@ namespace Tahakkum
 
             AddField(nameBox, "الاسم: صاحب العنوان أو الجهاز", Theme.S(18));
             nameBox.Box.MaxLength = ContactBook.MaxName;
-            nameBox.Box.Text = existing != null ? existing.Name : "";
+            nameBox.Box.Text = existing != null ? existing.Name : suggestedName ?? "";
 
             AddField(addressBox, "عنوان IP أو المعرّف من 9 أرقام", Theme.S(110));
             addressBox.Box.MaxLength = ContactBook.MaxAddress;

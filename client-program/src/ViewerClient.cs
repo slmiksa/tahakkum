@@ -199,6 +199,8 @@ namespace Tahakkum
                 w.Write(Proto.Version);
                 w.Write(Environment.MachineName);
                 w.Write(Environment.UserName);
+                // Added after the first release: older hosts simply stop reading before it.
+                w.Write(Profile.DisplayName);
             }));
 
             client.ReceiveTimeout = (Proto.ConsentSeconds + 15) * 1000;
@@ -265,7 +267,7 @@ namespace Tahakkum
             switch (reason)
             {
                 case DenyReason.Rejected: return "رفض الشخص أمام الشاشة طلب التحكم.";
-                case DenyReason.Busy: return "هذه الشاشة مشغولة بطلب أو جلسة تحكم أخرى.";
+                case DenyReason.Busy: return "وصل هذا الجهاز إلى الحد الأقصى من المتصلين (" + Proto.MaxViewers + ")، أو أن صاحبه أوقف استقبال طلبات جديدة.";
                 case DenyReason.Timeout: return "لم يرد أحد على الطلب خلال " + Proto.ConsentSeconds + " ثانية.";
                 case DenyReason.Version: return "إصدار البرنامج على الجهاز الآخر مختلف. ثبّت نفس الإصدار على الجهازين.";
                 case DenyReason.Cooldown: return "تم رفض طلبك قبل قليل. حاول مرة أخرى بعد بضع ثوانٍ.";

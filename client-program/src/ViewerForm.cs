@@ -106,6 +106,7 @@ namespace Tahakkum
         readonly PillButton fitButton;
         readonly PillButton fullButton;
         readonly PillButton viewOnlyButton;
+        readonly PillButton controlButton;
         readonly ContextMenuStrip monitorMenu;
         readonly ContextMenuStrip qualityMenu;
         readonly ContextMenuStrip keysMenu;
@@ -122,6 +123,10 @@ namespace Tahakkum
         int openMenus;
         bool viewOnly;
         bool remotePaused;
+        // A host from before shared sessions never says, and there the only viewer controls.
+        volatile bool hasControl = true;
+        string controllerName = "";
+        int viewerCount = 1;
         bool fullscreen;
         bool closingByUs;
         FormWindowState restoreState;
@@ -174,6 +179,11 @@ namespace Tahakkum
             PillButton filesButton = AddTool("إرسال ملفات", Theme.GlyphFile, Theme.S(116), ButtonKind.Secondary);
             filesButton.Click += delegate { transfers.PickAndSend(this); };
 
+            // Shown only while others are watching too.
+            controlButton = AddTool("أخذ التحكم", Theme.GlyphConnect, Theme.S(124), ButtonKind.Primary);
+            controlButton.Visible = false;
+            controlButton.Click += delegate { if (!hasControl) conn.Send(Msg.ControlRequest, null); };
+
             monitorMenu = NewMenu();
             monitorButton = AddTool("الشاشة 1", Theme.GlyphMonitor, Theme.S(110), ButtonKind.Secondary);
             monitorButton.Click += delegate { ShowMenu(monitorMenu, monitorButton); };
@@ -210,7 +220,8 @@ namespace Tahakkum
             stats.RightToLeft = RightToLeft.No;
             stats.BackColor = Theme.Card;
             stats.Dock = DockStyle.Left;
-            stats.Width = Theme.S(250);
+            stats.Width = Theme.S(200);
+            stats.AutoEllipsis = true;
             stats.Padding = new Padding(Theme.S(12), 0, 0, 0);
 
             toolbar.Controls.Add(tools);
@@ -332,6 +343,7 @@ namespace Tahakkum
                         Interlocked.Exchange(ref latency, clock.ElapsedMilliseconds - BitConverter.ToInt64(data, 0));
                         break;
                     case Msg.Status: HandleStatus((HostStatus)data[0]); break;
+                    case Msg.ControlState: HandleControlState(data); break;
                     case Msg.Clipboard:
                         using (BinaryReader r = Pack.Read(data))
                         {
@@ -459,6 +471,57 @@ namespace Tahakkum
             });
         }
 
+        void HandleControlState(byte[] data)
+        {
+            bool mine;
+            string controller;
+            int count;
+            using (BinaryReader r = Pack.Read(data))
+            {
+                mine = r.ReadBoolean();
+                controller = Identity.Sanitize(r.ReadString(), 64);
+                count = r.ReadInt32();
+            }
+            if (count < 1 || count > 64) return;
+            hasControl = mine;
+            OnUi(delegate
+            {
+                bool lost = !mine && controllerName.Length > 0 && viewerCount > 1;
+                bool gained = mine && count > 1 && controllerName.Length > 0 && controllerName != controller;
+                controllerName = controller;
+                viewerCount = count;
+                if (!mine) ReleaseHeldKeys();
+                controlButton.Visible = count > 1;
+                controlButton.Enabled = !mine;
+                controlButton.Text = mine ? "التحكم معك" : "أخذ التحكم";
+                controlButton.Kind = mine ? ButtonKind.Secondary : ButtonKind.Primary;
+                controlButton.Invalidate();
+                tools.PerformLayout();
+                if (lost) ShowNotice("انتقل التحكم إلى " + controller);
+                else if (gained) ShowNotice("التحكم معك الآن");
+                ShowStats("");
+            });
+        }
+
+        // A short note over the picture that clears itself, for things the person should notice.
+        void ShowNotice(string text)
+        {
+            surface.Overlay = text;
+            surface.Invalidate();
+            System.Windows.Forms.Timer t = new System.Windows.Forms.Timer { Interval = 1800 };
+            t.Tick += delegate
+            {
+                t.Stop();
+                t.Dispose();
+                if (surface.Overlay == text)
+                {
+                    surface.Overlay = null;
+                    surface.Invalidate();
+                }
+            };
+            t.Start();
+        }
+
         void HandleStatus(HostStatus status)
         {
             OnUi(delegate
@@ -500,7 +563,7 @@ namespace Tahakkum
 
         // ---- outgoing input ----
 
-        bool CanControl { get { return !viewOnly && !remotePaused && !conn.IsClosed; } }
+        bool CanControl { get { return !viewOnly && !remotePaused && hasControl && !conn.IsClosed; } }
 
         void OnSurfaceMove(object sender, MouseEventArgs e)
         {
@@ -720,8 +783,18 @@ namespace Tahakkum
             long l = Interlocked.Read(ref latency);
             string line = f + " fps   |   " + (b * 8 / 1000000.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " Mbps";
             if (l >= 0) line += "   |   " + l + " ms";
-            if (remotePaused) line = "أوقف الطرف الآخر التحكم مؤقتاً";
-            stats.Text = line;
+            ShowStats(line);
+        }
+
+        // With others watching, who controls matters more than the frame rate.
+        void ShowStats(string numbers)
+        {
+            string text = numbers;
+            if (remotePaused) text = "أوقف الطرف الآخر التحكم مؤقتاً";
+            else if (viewerCount > 1) text = (hasControl ? "التحكم معك" : "يتحكم: " + controllerName) + "  •  المتصلون: " + viewerCount;
+            stats.RightToLeft = text == numbers ? RightToLeft.No : RightToLeft.Yes;
+            stats.TextAlign = text == numbers ? ContentAlignment.MiddleLeft : ContentAlignment.MiddleRight;
+            stats.Text = text;
         }
 
         protected override void OnShown(EventArgs e)

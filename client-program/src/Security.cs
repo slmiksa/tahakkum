@@ -349,6 +349,32 @@ namespace Tahakkum
         }
     }
 
+    // The name this person shows to support staff: in the network list, and to the person
+    // they connect to. It follows the Windows user, like the person it names.
+    static class Profile
+    {
+        public const int MaxName = 40;
+
+        static string PathName { get { return Path.Combine(AppFiles.Dir, "profile.txt"); } }
+
+        public static string DisplayName
+        {
+            get
+            {
+                try
+                {
+                    if (File.Exists(PathName)) return Identity.Sanitize(File.ReadAllText(PathName, Encoding.UTF8), MaxName).Trim();
+                }
+                catch (Exception) { }
+                return "";
+            }
+            set
+            {
+                File.WriteAllText(PathName, Identity.Sanitize(value ?? "", MaxName).Trim(), new UTF8Encoding(false));
+            }
+        }
+    }
+
     static class RecentHosts
     {
         static string PathName { get { return Path.Combine(AppFiles.Dir, "recent.txt"); } }

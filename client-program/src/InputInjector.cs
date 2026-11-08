@@ -101,8 +101,20 @@ namespace Tahakkum
             }
         }
 
+        // For tests: see what would be injected without moving this machine's real pointer.
+        public static Action<string> Observe = null;
+        public static bool Suppress = false;
+
+        static bool Pass(string what)
+        {
+            Action<string> h = Observe;
+            if (h != null) h(what);
+            return !Suppress;
+        }
+
         static void SendMouse(int dx, int dy, uint data, uint flags)
         {
+            if (!Pass("mouse")) return;
             Native.INPUT[] input = new Native.INPUT[1];
             input[0].type = Native.INPUT_MOUSE;
             input[0].u.mi.dx = dx;
@@ -123,6 +135,7 @@ namespace Tahakkum
 
         static void SendKey(int vk, int scan, bool extended, bool down)
         {
+            if (!Pass("key")) return;
             Native.INPUT[] input = new Native.INPUT[1];
             input[0].type = Native.INPUT_KEYBOARD;
             uint flags = down ? 0 : Native.KEYEVENTF_KEYUP;

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -23,6 +24,9 @@ namespace Tahakkum
         public string Machine;
         public string User;
         public string Code;
+        public string Nick = "";
+        // How many people already watch this screen, so the person knows who else is there.
+        public int Watching;
         public event Action Cancelled;
 
         public void Approve() { Resolve(1); }
@@ -67,10 +71,11 @@ namespace Tahakkum
         readonly Dictionary<string, DateTime> cooldowns = new Dictionary<string, DateTime>();
         readonly Dictionary<string, List<DateTime>> passwordFails = new Dictionary<string, List<DateTime>>();
         TcpListener listener;
-        int busy;
+        int viewers;
         volatile bool running;
 
         public readonly string Code;
+        public readonly ControlDesk Desk = new ControlDesk();
         public event Action<ConsentRequest> ConsentNeeded;
         public event Action<HostSession> SessionStarted;
         public event Action<HostSession> SessionEnded;
@@ -230,7 +235,7 @@ namespace Tahakkum
 
                 Packet hello = Connection.ReadPacket(ssl, Proto.MaxPreApproval);
                 if (hello.Type != Msg.Hello) throw new InvalidDataException("hello");
-                string machine, user;
+                string machine, user, nick = "";
                 using (BinaryReader r = Pack.Read(hello.Data))
                 {
                     if (r.ReadInt32() != Proto.Magic) throw new InvalidDataException("magic");
@@ -241,6 +246,8 @@ namespace Tahakkum
                     }
                     machine = Identity.Sanitize(r.ReadString(), 64);
                     user = Identity.Sanitize(r.ReadString(), 64);
+                    // The viewer's chosen name, which viewers from before this field do not send.
+                    if (r.BaseStream.Position < r.BaseStream.Length) nick = Identity.Sanitize(r.ReadString(), Profile.MaxName).Trim();
                 }
 
                 // Only new sessions are refused: a session in progress when the license ends carries on.
@@ -272,15 +279,17 @@ namespace Tahakkum
                     Connection.WritePacket(ssl, Msg.Denied, new[] { (byte)DenyReason.Cooldown });
                     return;
                 }
-                if (Interlocked.CompareExchange(ref busy, 1, 0) != 0)
+                // A place is held from the request on, so prompts that are still open count too.
+                if (Interlocked.Increment(ref viewers) > Proto.MaxViewers)
                 {
+                    Interlocked.Decrement(ref viewers);
                     Connection.WritePacket(ssl, Msg.Denied, new[] { (byte)DenyReason.Busy });
                     return;
                 }
                 holdsBusy = true;
 
                 Connection conn = new Connection(tcp, ssl);
-                ConsentRequest request = new ConsentRequest { RemoteIp = ip, Machine = machine, User = user, Code = Code };
+                ConsentRequest request = new ConsentRequest { RemoteIp = ip, Machine = machine, User = user, Nick = nick, Code = Code, Watching = Desk.Count };
                 conn.Closed += request.Cancel;
                 conn.SetTimeouts((Proto.ConsentSeconds + 15) * 1000, 15000);
                 conn.Start();
@@ -305,10 +314,10 @@ namespace Tahakkum
                     }
                 }
 
-                AppFiles.Log((byPassword ? "بدأت جلسة تحكم بكلمة السر من " : "بدأت جلسة تحكم من ") + ip + " (" + user + "@" + machine + ")");
+                AppFiles.Log((byPassword ? "بدأت جلسة تحكم بكلمة السر من " : "بدأت جلسة تحكم من ") + ip + " (" + (nick.Length > 0 ? nick + "، " : "") + user + "@" + machine + ")");
                 conn.MaxIncoming = Proto.MaxFromViewer;
                 conn.SetTimeouts(15000, 15000);
-                HostSession session = new HostSession(conn, ip, machine, user);
+                HostSession session = new HostSession(conn, ip, machine, user, nick, Desk);
                 Action<HostSession> started = SessionStarted;
                 if (started != null) started(session);
                 try
@@ -330,7 +339,7 @@ namespace Tahakkum
             }
             finally
             {
-                if (holdsBusy) Interlocked.Exchange(ref busy, 0);
+                if (holdsBusy) Interlocked.Decrement(ref viewers);
             }
         }
     }
@@ -352,9 +361,12 @@ namespace Tahakkum
         public readonly string RemoteIp;
         public readonly string Machine;
         public readonly string User;
+        public readonly string Nick;
         public readonly FileTransferService Files;
+        readonly ControlDesk desk;
 
         volatile bool stopping;
+        volatile bool hasControl;
         volatile bool paused;
         volatile bool locked;
         volatile int qualityMode;
@@ -365,18 +377,42 @@ namespace Tahakkum
 
         public event Action<string> ClipboardFromViewer;
 
-        public HostSession(Connection conn, string ip, string machine, string user)
+        public HostSession(Connection conn, string ip, string machine, string user, string nick, ControlDesk desk)
         {
             this.conn = conn;
+            this.desk = desk;
             RemoteIp = ip;
             Machine = machine;
             User = user;
+            Nick = nick ?? "";
             Files = new FileTransferService(conn, ip);
             // Nobody can answer a prompt on a locked machine, and pausing means the viewer should stop acting here.
             Files.OffersBlocked = () => paused || locked;
         }
 
         public bool Paused { get { return paused; } }
+        public bool HasControl { get { return hasControl; } }
+
+        // Who this is, for the person at the machine: the name they chose, else their Windows user.
+        public string DisplayName
+        {
+            get { return Nick.Length > 0 ? Nick : User.Length > 0 ? User : RemoteIp; }
+        }
+
+        // Called by the desk, which keeps every viewer's view of who controls consistent.
+        public void ApplyControl(bool mine, string controller, string[] names)
+        {
+            bool had = hasControl;
+            hasControl = mine;
+            if (had && !mine) injector.ReleaseAll();
+            conn.Send(Msg.ControlState, Pack.Build(w =>
+            {
+                w.Write(mine);
+                w.Write(controller);
+                w.Write(names.Length);
+                foreach (string n in names) w.Write(n);
+            }));
+        }
 
         public void SendClipboard(string text)
         {
@@ -406,12 +442,15 @@ namespace Tahakkum
             conn.Received += OnMessage;
             conn.Closed += () => { stopping = true; ackSignal.Set(); };
             conn.Send(Msg.Approved, null);
+            desk.Join(this);
             try
             {
                 CaptureLoop();
             }
             finally
             {
+                desk.Leave(this);
+                hasControl = false;
                 injector.ReleaseAll();
                 conn.Close();
                 Files.Shutdown();
@@ -449,9 +488,13 @@ namespace Tahakkum
                         stopping = true;
                         conn.Close();
                         return;
+                    case Msg.ControlRequest:
+                        desk.Give(this);
+                        return;
                 }
 
-                if (paused || locked || stopping) return;
+                // Only the viewer holding control drives this machine; the others watch.
+                if (paused || locked || stopping || !hasControl) return;
                 switch (type)
                 {
                     case Msg.MouseMove:
@@ -644,6 +687,84 @@ namespace Tahakkum
                     w.Write(encoded[i]);
                 }
             });
+        }
+    }
+
+    // Decides which connected viewer drives the mouse and keyboard. Everyone sees the screen,
+    // one person controls at a time, and every viewer always hears who that is.
+    sealed class ControlDesk
+    {
+        readonly object gate = new object();
+        readonly List<HostSession> sessions = new List<HostSession>();
+        HostSession controller;
+
+        public event Action Changed;
+
+        public int Count
+        {
+            get { lock (gate) return sessions.Count; }
+        }
+
+        public HostSession Controller
+        {
+            get { lock (gate) return controller; }
+        }
+
+        public HostSession[] Sessions
+        {
+            get { lock (gate) return sessions.ToArray(); }
+        }
+
+        // The first to arrive controls, so a single viewer works exactly as before.
+        public void Join(HostSession s)
+        {
+            lock (gate)
+            {
+                if (sessions.Contains(s)) return;
+                sessions.Add(s);
+                if (controller == null) controller = s;
+                Publish();
+            }
+            Raise();
+        }
+
+        // When the controller leaves, control passes to whoever has been here longest.
+        public void Leave(HostSession s)
+        {
+            lock (gate)
+            {
+                if (!sessions.Remove(s)) return;
+                if (controller == s) controller = sessions.Count > 0 ? sessions[0] : null;
+                Publish();
+            }
+            Raise();
+        }
+
+        // Used both by a viewer taking control and by the person at the machine handing it over.
+        public void Give(HostSession s)
+        {
+            lock (gate)
+            {
+                if (!sessions.Contains(s) || controller == s) return;
+                controller = s;
+                AppFiles.Log("انتقل التحكم إلى " + s.DisplayName + " (" + s.RemoteIp + ")");
+                Publish();
+            }
+            Raise();
+        }
+
+        // Runs under the lock, so two changes can never reach viewers out of order.
+        void Publish()
+        {
+            string name = controller != null ? controller.DisplayName : "";
+            string[] names = sessions.Select(x => x.DisplayName).ToArray();
+            foreach (HostSession s in sessions) s.ApplyControl(s == controller, name, names);
+        }
+
+        void Raise()
+        {
+            Action h = Changed;
+            if (h != null) h();
         }
     }
 }

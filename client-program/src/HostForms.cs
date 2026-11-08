@@ -45,7 +45,10 @@ namespace Tahakkum
             title.SetBounds(m, Theme.S(22), w - 2 * m - Theme.S(60), Theme.S(30));
             Controls.Add(title);
 
-            Label sub = Theme.MakeLabel("لن يرى شاشتك أو يتحكم بها إلا إذا وافقت.", Theme.Ui(10f), Theme.Muted, ContentAlignment.MiddleRight);
+            string subText = request.Watching > 0
+                ? "يشاهد شاشتك الآن " + request.Watching + (request.Watching == 1 ? " شخص" : " أشخاص") + "، وهذا الطلب سينضم إليهم."
+                : "لن يرى شاشتك أو يتحكم بها إلا إذا وافقت.";
+            Label sub = Theme.MakeLabel(subText, Theme.Ui(10f), request.Watching > 0 ? Theme.Warning : Theme.Muted, ContentAlignment.MiddleRight);
             sub.SetBounds(m, Theme.S(52), w - 2 * m - Theme.S(60), Theme.S(24));
             Controls.Add(sub);
 
@@ -54,7 +57,9 @@ namespace Tahakkum
             Controls.Add(info);
             AddRow(info, 0, "عنوان IP", request.RemoteIp, true);
             AddRow(info, 1, "اسم الجهاز", request.Machine.Length > 0 ? request.Machine : "غير معروف", false);
-            AddRow(info, 2, "اسم المستخدم", request.User.Length > 0 ? request.User : "غير معروف", false);
+            string who = request.User.Length > 0 ? request.User : "غير معروف";
+            if (request.Nick.Length > 0) who = request.Nick + "  (" + who + ")";
+            AddRow(info, 2, "الاسم", who, request.Nick.Length > 0);
             AddRow(info, 3, "رمز التحقق", request.Code, true);
 
             Label note = Theme.MakeLabel("عند الموافقة سيرى شاشتك ويتحكم بها، ويمكنه طلب نقل الملفات. يمكنك إنهاء الجلسة في أي وقت. تأكد أن رمز التحقق يطابق ما عنده.", Theme.Ui(9.5f), Theme.Muted, ContentAlignment.TopRight);
@@ -146,28 +151,35 @@ namespace Tahakkum
         }
     }
 
-    // Always-visible strip on the controlled machine while a session runs. It never takes
-    // keyboard focus, and it is what lets the local person pause or end the session.
+    // Always-visible strip on the controlled machine while anyone is connected. It never takes
+    // keyboard focus, and it is what lets the local person see who is watching, choose who
+    // controls, and pause or end it all.
     sealed class SessionBar : Form
     {
-        readonly HostSession session;
+        readonly ControlDesk desk;
+        readonly Func<HostSession, FileTransferWindow> transfersFor;
+        readonly Label caption;
         readonly Label timeLabel;
+        readonly PillButton viewers;
         readonly PillButton pause;
+        readonly ContextMenuStrip viewerMenu;
         readonly StatusDot dot;
         readonly Timer timer;
         readonly DateTime started = DateTime.UtcNow;
+        bool paused;
         bool blink;
 
-        public SessionBar(HostSession session, FileTransferWindow transfers)
+        public SessionBar(ControlDesk desk, Func<HostSession, FileTransferWindow> transfersFor)
         {
-            this.session = session;
+            this.desk = desk;
+            this.transfersFor = transfersFor;
             Text = "جلسة تحكم نشطة";
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             TopMost = true;
             StartPosition = FormStartPosition.Manual;
             BackColor = Theme.Card;
-            ClientSize = new Size(Theme.S(790), Theme.S(52));
+            ClientSize = new Size(Theme.S(820), Theme.S(52));
 
             Rectangle area = Screen.PrimaryScreen.WorkingArea;
             Location = new Point(area.X + (area.Width - Width) / 2, area.Y + Theme.S(8));
@@ -177,26 +189,26 @@ namespace Tahakkum
             dot.SetBounds(w - Theme.S(30), Theme.S(19), Theme.S(14), Theme.S(14));
             Controls.Add(dot);
 
-            string who = session.RemoteIp;
-            if (session.User.Length > 0) who = session.User + " • " + who;
-            Label caption = Theme.MakeLabel("يتحكم بهذه الشاشة: " + who, Theme.UiBold(10f), Theme.Text, ContentAlignment.MiddleRight);
+            caption = Theme.MakeLabel("", Theme.UiBold(10f), Theme.Text, ContentAlignment.MiddleRight);
             caption.BackColor = Theme.Card;
             caption.AutoEllipsis = true;
-            caption.SetBounds(Theme.S(420), 0, w - Theme.S(456), Theme.S(52));
+            caption.SetBounds(Theme.S(450), 0, w - Theme.S(486), Theme.S(52));
             Controls.Add(caption);
 
             timeLabel = Theme.MakeLabel("00:00", Theme.Ui(10f), Theme.Muted, ContentAlignment.MiddleCenter);
             timeLabel.BackColor = Theme.Card;
             timeLabel.RightToLeft = RightToLeft.No;
-            timeLabel.SetBounds(Theme.S(356), 0, Theme.S(60), Theme.S(52));
+            timeLabel.SetBounds(Theme.S(386), 0, Theme.S(60), Theme.S(52));
             Controls.Add(timeLabel);
 
-            PillButton send = new PillButton { Text = "إرسال ملفات", Kind = ButtonKind.Secondary, Glyph = Theme.GlyphFile, GlyphSize = 9f };
-            send.Font = Theme.UiBold(9f);
-            send.SetBounds(Theme.S(230), Theme.S(9), Theme.S(124), Theme.S(34));
-            send.TabStop = false;
-            send.Click += delegate { transfers.PickAndSend(this); };
-            Controls.Add(send);
+            viewerMenu = Theme.MakeMenu();
+            viewerMenu.ShowCheckMargin = false;
+            viewers = new PillButton { Text = "المتصلون", Kind = ButtonKind.Secondary, Glyph = Theme.GlyphView, GlyphSize = 9f };
+            viewers.Font = Theme.UiBold(9f);
+            viewers.SetBounds(Theme.S(230), Theme.S(9), Theme.S(154), Theme.S(34));
+            viewers.TabStop = false;
+            viewers.Click += delegate { ShowViewers(); };
+            Controls.Add(viewers);
 
             pause = new PillButton { Text = "إيقاف التحكم", Kind = ButtonKind.Secondary, Glyph = Theme.GlyphPause, GlyphSize = 9f };
             pause.Font = Theme.UiBold(9f);
@@ -209,20 +221,75 @@ namespace Tahakkum
             end.Font = Theme.UiBold(9f);
             end.SetBounds(Theme.S(10), Theme.S(9), Theme.S(84), Theme.S(34));
             end.TabStop = false;
-            end.Click += delegate { session.End(); };
+            end.Click += delegate { foreach (HostSession s in desk.Sessions) s.End(); };
             Controls.Add(end);
 
             timer = new Timer { Interval = 800 };
             timer.Tick += delegate { Tick(); };
             timer.Start();
+            RefreshViewers();
+        }
+
+        public bool Paused { get { return paused; } }
+
+        static string Who(HostSession s)
+        {
+            return s.DisplayName + " (" + s.RemoteIp + ")";
+        }
+
+        public void RefreshViewers()
+        {
+            HostSession[] all = desk.Sessions;
+            HostSession controller = desk.Controller;
+            if (all.Length == 1) caption.Text = "يتحكم بهذه الشاشة: " + Who(all[0]);
+            else if (all.Length > 1) caption.Text = "يشاهد " + all.Length + " • يتحكم: " + (controller != null ? controller.DisplayName : "لا أحد");
+            viewers.Text = "المتصلون (" + all.Length + ")";
+            viewers.Invalidate();
+        }
+
+        // Each person: hand them control, send them files, or disconnect them alone.
+        void ShowViewers()
+        {
+            viewerMenu.Items.Clear();
+            HostSession controller = desk.Controller;
+            foreach (HostSession item in desk.Sessions)
+            {
+                HostSession s = item;
+                ToolStripMenuItem entry = new ToolStripMenuItem(Who(s) + (s == controller ? "  —  يتحكم الآن" : ""));
+                ToolStripMenuItem give = new ToolStripMenuItem("إعطاء التحكم");
+                give.Enabled = s != controller;
+                give.Click += delegate { desk.Give(s); };
+                ToolStripMenuItem files = new ToolStripMenuItem("إرسال ملفات");
+                files.Click += delegate
+                {
+                    FileTransferWindow w = transfersFor(s);
+                    if (w != null) w.PickAndSend(this);
+                };
+                ToolStripMenuItem drop = new ToolStripMenuItem("فصل هذا الشخص");
+                drop.Click += delegate { s.End(); };
+                entry.DropDownItems.AddRange(new ToolStripItem[] { give, files, drop });
+                StyleDropDown(entry);
+                viewerMenu.Items.Add(entry);
+            }
+            viewerMenu.Show(viewers, new Point(viewers.Width - viewerMenu.PreferredSize.Width, viewers.Height + Theme.S(4)));
+        }
+
+        static void StyleDropDown(ToolStripMenuItem item)
+        {
+            ToolStripDropDownMenu menu = (ToolStripDropDownMenu)item.DropDown;
+            menu.Renderer = new DarkMenuRenderer();
+            menu.ShowImageMargin = false;
+            menu.RightToLeft = RightToLeft.Yes;
+            menu.BackColor = Theme.Card;
+            menu.ForeColor = Theme.Text;
         }
 
         void TogglePause()
         {
-            bool nowPaused = !session.Paused;
-            session.SetPaused(nowPaused);
-            pause.Text = nowPaused ? "استئناف التحكم" : "إيقاف التحكم";
-            pause.Glyph = nowPaused ? Theme.GlyphPlay : Theme.GlyphPause;
+            paused = !paused;
+            foreach (HostSession s in desk.Sessions) s.SetPaused(paused);
+            pause.Text = paused ? "استئناف التحكم" : "إيقاف التحكم";
+            pause.Glyph = paused ? Theme.GlyphPlay : Theme.GlyphPause;
             pause.Invalidate();
         }
 
@@ -231,8 +298,9 @@ namespace Tahakkum
             TimeSpan t = DateTime.UtcNow - started;
             timeLabel.Text = ((int)t.TotalMinutes).ToString("00") + ":" + t.Seconds.ToString("00");
             blink = !blink;
-            dot.Color = session.Paused ? Theme.Warning : blink ? Theme.Danger : Color.FromArgb(150, 40, 40);
-            // Keep the strip above other topmost windows for the whole session.
+            dot.Color = paused ? Theme.Warning : blink ? Theme.Danger : Color.FromArgb(150, 40, 40);
+            // Keep the strip above other topmost windows, except while its own list is open over it.
+            if (viewerMenu.Visible) return;
             TopMost = false;
             TopMost = true;
         }
@@ -260,6 +328,7 @@ namespace Tahakkum
         {
             timer.Stop();
             timer.Dispose();
+            viewerMenu.Dispose();
             base.OnFormClosed(e);
         }
     }

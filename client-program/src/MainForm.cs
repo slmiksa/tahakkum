@@ -15,6 +15,10 @@ namespace Tahakkum
     sealed class MainForm : Form
     {
         const string FirewallRule = "Tahakkum Remote Control";
+        const string DiscoveryRule = "Tahakkum Network Discovery";
+        const int ListSaved = 0;
+        const int ListRecent = 1;
+        const int ListNetwork = 2;
         const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
         const string RunValue = "Tahakkum";
 
@@ -47,15 +51,19 @@ namespace Tahakkum
         readonly System.Windows.Forms.Timer licenseTimer;
 
         ViewerClient pending;
-        HostSession activeSession;
+        readonly List<HostSession> hostSessions = new List<HostSession>();
+        readonly Dictionary<HostSession, FileTransferWindow> hostTransfers = new Dictionary<HostSession, FileTransferWindow>();
+        readonly PillButton nameButton;
+        readonly PillButton networkTab;
+        readonly DiscoveryResponder discovery;
         SessionBar sessionBar;
-        FileTransferWindow hostTransfers;
         ClipboardSync hostClipboard;
+        int scanGeneration;
         bool exiting;
         bool firstVisible = true;
         bool trayHintShown;
         bool licenseWasValid = LicenseManager.IsValid;
-        bool showingSaved = true;
+        int listMode = ListSaved;
 
         public static uint ShowMessage;
 
@@ -136,13 +144,16 @@ namespace Tahakkum
             connectStatus = Theme.MakeLabel("", Theme.Ui(10f), Theme.Muted, ContentAlignment.TopRight);
             connectCard.Controls.Add(At(connectStatus, p, Theme.S(210), inner, Theme.S(50)));
 
-            // Address book: the saved list, and the recent connections beside it.
-            savedTab = MakeListTab("العناوين المحفوظة", true);
-            savedTab.SetBounds(cw - p - Theme.S(146), Theme.S(264), Theme.S(146), Theme.S(32));
+            // Address book: the saved list, the recent connections, and the machines on this network.
+            savedTab = MakeListTab("المحفوظة", ListSaved);
+            savedTab.SetBounds(cw - p - Theme.S(96), Theme.S(264), Theme.S(96), Theme.S(32));
             connectCard.Controls.Add(savedTab);
-            recentTab = MakeListTab("الأخيرة", false);
-            recentTab.SetBounds(cw - p - Theme.S(232), Theme.S(264), Theme.S(80), Theme.S(32));
+            recentTab = MakeListTab("الأخيرة", ListRecent);
+            recentTab.SetBounds(cw - p - Theme.S(182), Theme.S(264), Theme.S(80), Theme.S(32));
             connectCard.Controls.Add(recentTab);
+            networkTab = MakeListTab("في الشبكة", ListNetwork);
+            networkTab.SetBounds(cw - p - Theme.S(292), Theme.S(264), Theme.S(104), Theme.S(32));
+            connectCard.Controls.Add(networkTab);
             PillButton addContact = new PillButton { Text = "إضافة", Kind = ButtonKind.Secondary, Glyph = Theme.GlyphAdd, GlyphSize = 9f };
             addContact.Font = Theme.UiBold(9f);
             addContact.SetBounds(p, Theme.S(264), Theme.S(84), Theme.S(32));
@@ -225,8 +236,12 @@ namespace Tahakkum
             adminButton.Click += delegate { RestartElevated(); };
             hostCard.Controls.Add(adminButton);
 
-            Label adminNote = Theme.MakeLabel(IsElevated() ? "البرنامج يعمل كمسؤول، ويمكن التحكم بنوافذ المسؤول." : "شغّله كمسؤول إذا احتجت التحكم بالبرامج التي تعمل بصلاحية المسؤول.", Theme.Ui(9f), Theme.Muted, ContentAlignment.TopRight);
-            hostCard.Controls.Add(At(adminNote, p, Theme.S(460), inner, Theme.S(42)));
+            nameButton = new PillButton { Kind = ButtonKind.Secondary, Glyph = Theme.GlyphEdit, GlyphSize = 9f };
+            nameButton.Font = Theme.UiBold(9f);
+            nameButton.SetBounds(p, Theme.S(462), inner, Theme.S(38));
+            nameButton.Click += delegate { EditDisplayName(); };
+            hostCard.Controls.Add(nameButton);
+            RefreshNameButton();
 
             hostToggle.Checked = server != null;
             hostToggle.Enabled = server != null;
@@ -244,6 +259,12 @@ namespace Tahakkum
                 server.ConsentNeeded += r => OnUi(() => ShowConsent(r));
                 server.SessionStarted += s => OnUi(() => BeginHostSession(s));
                 server.SessionEnded += s => OnUi(() => EndHostSession(s));
+                server.Desk.Changed += () => OnUi(() =>
+                {
+                    if (sessionBar != null) sessionBar.RefreshViewers();
+                    if (hostSessions.Count > 0) UpdateHostState();
+                });
+                discovery = new DiscoveryResponder(Proto.DiscoveryPort, DescribeThisMachine);
             }
 
             SetupTray();
@@ -401,7 +422,7 @@ namespace Tahakkum
             if (valid != licenseWasValid)
             {
                 licenseWasValid = valid;
-                if (activeSession == null) ApplyHostToggle();
+                if (hostSessions.Count == 0) ApplyHostToggle();
                 ApplyInternet();
             }
         }
@@ -423,7 +444,7 @@ namespace Tahakkum
         // set a password and come back later without anyone approving it.
         void OpenPassword()
         {
-            if (activeSession != null)
+            if (hostSessions.Count > 0)
             {
                 MessageBox.Show(this, "لا يمكن تغيير كلمة السر أثناء جلسة تحكم. أنهِ الجلسة أولاً.", "كلمة سر الوصول", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1,
                     MessageBoxOptions.RightAlign | MessageBoxOptions.RtlReading);
@@ -553,14 +574,14 @@ namespace Tahakkum
             connectStatus.ForeColor = color;
         }
 
-        PillButton MakeListTab(string text, bool saved)
+        PillButton MakeListTab(string text, int mode)
         {
-            PillButton tab = new PillButton { Text = text, Kind = saved ? ButtonKind.Primary : ButtonKind.Secondary };
+            PillButton tab = new PillButton { Text = text, Kind = mode == ListSaved ? ButtonKind.Primary : ButtonKind.Secondary };
             tab.Font = Theme.UiBold(9f);
             tab.TabStop = false;
             tab.Click += delegate
             {
-                showingSaved = saved;
+                listMode = mode;
                 RefreshRecent();
             };
             return tab;
@@ -568,15 +589,18 @@ namespace Tahakkum
 
         void RefreshRecent()
         {
-            savedTab.Kind = showingSaved ? ButtonKind.Primary : ButtonKind.Secondary;
-            recentTab.Kind = showingSaved ? ButtonKind.Secondary : ButtonKind.Primary;
+            savedTab.Kind = listMode == ListSaved ? ButtonKind.Primary : ButtonKind.Secondary;
+            recentTab.Kind = listMode == ListRecent ? ButtonKind.Primary : ButtonKind.Secondary;
+            networkTab.Kind = listMode == ListNetwork ? ButtonKind.Primary : ButtonKind.Secondary;
+            networkTab.Invalidate();
             savedTab.Invalidate();
             recentTab.Invalidate();
 
             recentPanel.SuspendLayout();
             recentPanel.Controls.Clear();
-            if (showingSaved) FillSavedList();
-            else FillRecentList();
+            if (listMode == ListSaved) FillSavedList();
+            else if (listMode == ListRecent) FillRecentList();
+            else FillNetworkList();
             recentPanel.ResumeLayout();
         }
 
@@ -671,13 +695,95 @@ namespace Tahakkum
             }
         }
 
+        void FillNetworkList()
+        {
+            int mine = ++scanGeneration;
+            ShowListHint("جاري البحث عن الأجهزة في هذه الشبكة…");
+            Thread t = new Thread(() =>
+            {
+                List<FoundDevice> found;
+                try { found = DiscoveryClient.Scan(Proto.DiscoveryPort, DiscoveryClient.BroadcastTargets(), 1500, DiscoveryClient.OwnAddresses()); }
+                catch (Exception ex)
+                {
+                    AppFiles.Log("تعذر البحث عن الأجهزة: " + ex.Message);
+                    found = new List<FoundDevice>();
+                }
+                OnUi(() => ShowNetworkList(mine, found));
+            });
+            t.IsBackground = true;
+            t.Name = "discovery-scan";
+            t.Start();
+        }
+
+        void ShowNetworkList(int generation, List<FoundDevice> found)
+        {
+            // A newer search, or another tab, has taken over the list since this one started.
+            if (generation != scanGeneration || listMode != ListNetwork) return;
+            recentPanel.SuspendLayout();
+            recentPanel.Controls.Clear();
+            if (found.Count == 0)
+            {
+                ShowListHint("لم يُعثر على أجهزة. يظهر الجهاز هنا إذا كان البرنامج يعمل عليه مع تفعيل استقبال الطلبات، وسُمح له في الجدار الناري. اضغط \"في الشبكة\" للبحث مرة أخرى.");
+                recentPanel.ResumeLayout();
+                return;
+            }
+            int width = ListWidth(found.Count);
+            int y = 0;
+            foreach (FoundDevice item in found)
+            {
+                FoundDevice d = item;
+                // The mark keeps the address from reordering around an Arabic name.
+                PillButton row = new PillButton { Text = d.Title + "\u200F   •   \u200E" + d.Address, Kind = ButtonKind.Secondary, Glyph = Theme.GlyphMonitor, GlyphSize = 10f };
+                row.Font = Theme.Ui(10f);
+                row.SetBounds(0, y, width - Theme.S(42), Theme.S(36));
+                row.Click += delegate { ConnectTo(d.Port == Proto.DefaultPort ? d.Address : d.Address + ":" + d.Port); };
+                recentPanel.Controls.Add(row);
+
+                PillButton save = new PillButton { Kind = ButtonKind.Ghost, Glyph = Theme.GlyphAdd, GlyphSize = 9f, AccessibleName = "حفظ " + d.Title };
+                save.SetBounds(width - Theme.S(36), y, Theme.S(36), Theme.S(36));
+                save.Click += delegate { EditContact(new Contact { Name = d.Title, Address = "" }, d.Address); };
+                recentPanel.Controls.Add(save);
+                y += Theme.S(40);
+            }
+            recentPanel.ResumeLayout();
+        }
+
+        // What this machine tells others on the network. Nothing at all unless it accepts requests.
+        FoundDevice DescribeThisMachine()
+        {
+            if (server == null || !server.IsRunning || !LicenseManager.IsValid) return null;
+            string id = relay != null ? relay.Id : null;
+            return new FoundDevice
+            {
+                Name = Profile.DisplayName,
+                User = Environment.UserName,
+                Machine = Environment.MachineName,
+                Port = Proto.DefaultPort,
+                DeviceId = id ?? ""
+            };
+        }
+
+        void RefreshNameButton()
+        {
+            string name = Profile.DisplayName;
+            nameButton.Text = name.Length > 0 ? "اسمك الظاهر للدعم الفني: " + name : "عيّن اسمك الظاهر للدعم الفني";
+            nameButton.Invalidate();
+        }
+
+        void EditDisplayName()
+        {
+            using (DisplayNameForm form = new DisplayNameForm()) form.ShowDialog(this);
+            RefreshNameButton();
+        }
+
         void EditContact(Contact existing, string address)
         {
-            using (ContactForm form = new ContactForm(existing, address))
+            bool isEdit = existing != null && existing.Address.Length > 0;
+            using (ContactForm form = new ContactForm(isEdit ? existing : null, address, existing != null ? existing.Name : null))
             {
                 if (form.ShowDialog(this) != DialogResult.OK) return;
             }
-            showingSaved = true;
+            listMode = ListSaved;
             // Deferred: this can run from a button in the list that is about to be rebuilt.
             BeginInvoke((Action)RefreshRecent);
         }
@@ -713,6 +819,11 @@ namespace Tahakkum
                 hostState.Text = "المنفذ " + Proto.DefaultPort + " مستخدم من برنامج آخر.";
                 return;
             }
+            if (discovery != null)
+            {
+                if (hostToggle.Checked) discovery.Start();
+                else discovery.Stop();
+            }
             hostDot.Color = hostToggle.Checked ? Theme.Success : Theme.Muted;
             hostState.Text = hostToggle.Checked ? "جاهز لاستقبال الطلبات على المنفذ " + Proto.DefaultPort : "لا يستقبل طلبات تحكم";
             if (hostToggle.Checked && !LicenseManager.IsValid)
@@ -731,23 +842,57 @@ namespace Tahakkum
 
         void BeginHostSession(HostSession session)
         {
-            activeSession = session;
-            hostDot.Color = Theme.Danger;
-            hostState.Text = "جلسة تحكم نشطة من " + session.RemoteIp;
-            hostTransfers = new FileTransferWindow(session.Files, session.User.Length > 0 ? session.User + " (" + session.RemoteIp + ")" : session.RemoteIp);
-            sessionBar = new SessionBar(session, hostTransfers);
-            sessionBar.Show();
-            hostClipboard = new ClipboardSync(session.SendClipboard);
+            bool first = hostSessions.Count == 0;
+            hostSessions.Add(session);
+            hostTransfers[session] = new FileTransferWindow(session.Files, session.DisplayName + " (" + session.RemoteIp + ")");
             session.ClipboardFromViewer += text => OnUi(() => { if (hostClipboard != null) hostClipboard.Apply(text); });
-            // A panic key for the local person, in case the pointer is being moved away from the bar.
-            Native.RegisterHotKey(Handle, 1, 0x0007, 0x51);
-            tray.ShowBalloonTip(4000, "جلسة تحكم نشطة", "يتحكم بهذه الشاشة: " + session.RemoteIp + "\nللإنهاء الفوري: Ctrl + Alt + Shift + Q", ToolTipIcon.Warning);
+            if (first)
+            {
+                sessionBar = new SessionBar(server.Desk, s =>
+                {
+                    FileTransferWindow w;
+                    return hostTransfers.TryGetValue(s, out w) ? w : null;
+                });
+                sessionBar.Show();
+                // What is copied here goes to everyone watching.
+                hostClipboard = new ClipboardSync(text => { foreach (HostSession s in hostSessions.ToArray()) s.SendClipboard(text); });
+                // A panic key for the local person, in case the pointer is being moved away from the bar.
+                Native.RegisterHotKey(Handle, 1, 0x0007, 0x51);
+            }
+            else if (sessionBar.Paused)
+            {
+                session.SetPaused(true);
+            }
+            sessionBar.RefreshViewers();
+            UpdateHostState();
+            string who = session.DisplayName + " (" + session.RemoteIp + ")";
+            tray.ShowBalloonTip(4000, first ? "جلسة تحكم نشطة" : "انضم شخص إلى الجلسة",
+                (first ? "يتحكم بهذه الشاشة: " : "يشاهد الآن أيضاً: ") + who + "\nللإنهاء الفوري: Ctrl + Alt + Shift + Q", ToolTipIcon.Warning);
+        }
+
+        void UpdateHostState()
+        {
+            hostDot.Color = Theme.Danger;
+            hostState.Text = hostSessions.Count == 1
+                ? "جلسة تحكم نشطة من " + hostSessions[0].RemoteIp
+                : "جلسة نشطة: " + hostSessions.Count + " متصلين";
         }
 
         void EndHostSession(HostSession session)
         {
-            if (activeSession != session) return;
-            activeSession = null;
+            if (!hostSessions.Remove(session)) return;
+            FileTransferWindow w;
+            if (hostTransfers.TryGetValue(session, out w))
+            {
+                w.CloseForGood();
+                hostTransfers.Remove(session);
+            }
+            if (hostSessions.Count > 0)
+            {
+                if (sessionBar != null) sessionBar.RefreshViewers();
+                UpdateHostState();
+                return;
+            }
             Native.UnregisterHotKey(Handle, 1);
             if (hostClipboard != null)
             {
@@ -759,24 +904,23 @@ namespace Tahakkum
                 sessionBar.Close();
                 sessionBar = null;
             }
-            if (hostTransfers != null)
-            {
-                hostTransfers.CloseForGood();
-                hostTransfers = null;
-            }
             ApplyHostToggle();
+        }
+
+        void EndAllHostSessions()
+        {
+            foreach (HostSession s in hostSessions.ToArray()) s.End();
         }
 
         protected override void DefWndProc(ref Message m)
         {
-            if (m.Msg == Native.WM_HOTKEY && activeSession != null) activeSession.End();
+            if (m.Msg == Native.WM_HOTKEY) EndAllHostSessions();
             base.DefWndProc(ref m);
         }
 
         void OnDisplaysChanged(object sender, EventArgs e)
         {
-            HostSession s = activeSession;
-            if (s != null) s.NotifyDisplaysChanged();
+            foreach (HostSession s in hostSessions.ToArray()) s.NotifyDisplaysChanged();
         }
 
         // ---- system integration ----
@@ -785,21 +929,7 @@ namespace Tahakkum
         {
             Thread t = new Thread(() =>
             {
-                bool present = false;
-                try
-                {
-                    ProcessStartInfo psi = new ProcessStartInfo("netsh", "advfirewall firewall show rule name=\"" + FirewallRule + "\"");
-                    psi.CreateNoWindow = true;
-                    psi.UseShellExecute = false;
-                    psi.RedirectStandardOutput = true;
-                    using (Process proc = Process.Start(psi))
-                    {
-                        proc.StandardOutput.ReadToEnd();
-                        proc.WaitForExit(5000);
-                        present = proc.HasExited && proc.ExitCode == 0;
-                    }
-                }
-                catch (Exception) { }
+                bool present = RuleExists(FirewallRule) && RuleExists(DiscoveryRule);
                 OnUi(() =>
                 {
                     firewallState.Text = present ? "الجدار الناري: البرنامج مسموح له" : "الجدار الناري: قد يمنع الطلبات الواردة";
@@ -811,14 +941,45 @@ namespace Tahakkum
             t.Start();
         }
 
-        // Inbound is limited to private address ranges on domain and private networks.
-        void AddFirewallRule()
+        static bool RuleExists(string name)
         {
-            string args = "advfirewall firewall add rule name=\"" + FirewallRule + "\" dir=in action=allow protocol=TCP localport=" + Proto.DefaultPort
-                + " program=\"" + Application.ExecutablePath + "\" profile=domain,private remoteip=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16";
             try
             {
-                ProcessStartInfo psi = new ProcessStartInfo("netsh", args);
+                ProcessStartInfo psi = new ProcessStartInfo("netsh", "advfirewall firewall show rule name=\"" + name + "\"");
+                psi.CreateNoWindow = true;
+                psi.UseShellExecute = false;
+                psi.RedirectStandardOutput = true;
+                using (Process proc = Process.Start(psi))
+                {
+                    proc.StandardOutput.ReadToEnd();
+                    proc.WaitForExit(5000);
+                    return proc.HasExited && proc.ExitCode == 0;
+                }
+            }
+            catch (Exception) { return false; }
+        }
+
+        static string RuleCommand(string name, string protocol, int port)
+        {
+            return "netsh advfirewall firewall add rule name=\"" + name + "\" dir=in action=allow protocol=" + protocol + " localport=" + port
+                + " program=\"" + Application.ExecutablePath + "\" profile=domain,private remoteip=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16";
+        }
+
+        // Inbound is limited to private address ranges on domain and private networks.
+        // Only missing rules are added, all under one administrator prompt.
+        void AddFirewallRule()
+        {
+            List<string> commands = new List<string>();
+            if (!RuleExists(FirewallRule)) commands.Add(RuleCommand(FirewallRule, "TCP", Proto.DefaultPort));
+            if (!RuleExists(DiscoveryRule)) commands.Add(RuleCommand(DiscoveryRule, "UDP", Proto.DiscoveryPort));
+            if (commands.Count == 0)
+            {
+                CheckFirewallAsync();
+                return;
+            }
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", "/c " + string.Join(" & ", commands.ToArray()));
                 psi.Verb = "runas";
                 psi.UseShellExecute = true;
                 psi.WindowStyle = ProcessWindowStyle.Hidden;
@@ -933,8 +1094,8 @@ namespace Tahakkum
             LicenseManager.Changed -= OnLicenseChanged;
             licenseTimer.Stop();
             licenseTimer.Dispose();
-            HostSession s = activeSession;
-            if (s != null) s.End();
+            EndAllHostSessions();
+            if (discovery != null) discovery.Stop();
             if (relay != null) relay.Stop();
             if (server != null) server.Stop();
             tray.Visible = false;
