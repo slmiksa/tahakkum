@@ -7,3 +7,4 @@ supabase-backend/supabase/.temp/
 # Android adb tool (download separately, never commit the binaries)
 client-program/platform-tools/
 client-program/vendor/
+client-program/dist/platform-tools/

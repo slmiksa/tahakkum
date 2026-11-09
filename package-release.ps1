@@ -40,7 +40,7 @@ if (Test-Path $adbDir) {
         if (Test-Path $p) { $clientEntries["platform-tools/$f"] = $p }
     }
 } else {
-    Write-Host "ملاحظة: مجلد platform-tools (adb) غير موجود، فلن تُضمّن أداة أندرويد. راجع README للتنزيل." -ForegroundColor Yellow
+    Write-Host "Note: platform-tools (adb) folder not found; the Android tool will not be bundled. See README to download it." -ForegroundColor Yellow
 }
 New-Zip (Join-Path $release 'tahakkum-client.zip') $clientEntries
 
