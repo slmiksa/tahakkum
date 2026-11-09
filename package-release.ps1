@@ -26,10 +26,23 @@ foreach ($f in 'index.html', 'app.js', 'config.js', 'styles.css', 'logo.svg', 'i
 New-Zip (Join-Path $release 'tahakkum-dashboard.zip') $dashboard
 
 $exe = Join-Path $root 'client-program\dist\Tahakkum.exe'
-New-Zip (Join-Path $release 'tahakkum-client.zip') @{
+$clientEntries = @{
     'Tahakkum.exe' = $exe
     'README.txt'   = (Join-Path $root 'client-program\customer-readme.txt')
 }
+# Android TV control needs Google's adb. It is not in git; drop platform-tools next to the exe
+# (client-program\platform-tools) and it rides along in the client zip. Without it, every other
+# feature still works and only the Android TV button reports adb missing.
+$adbDir = Join-Path $root 'client-program\platform-tools'
+if (Test-Path $adbDir) {
+    foreach ($f in 'adb.exe', 'AdbWinApi.dll', 'AdbWinUsbApi.dll') {
+        $p = Join-Path $adbDir $f
+        if (Test-Path $p) { $clientEntries["platform-tools/$f"] = $p }
+    }
+} else {
+    Write-Host "ملاحظة: مجلد platform-tools (adb) غير موجود، فلن تُضمّن أداة أندرويد. راجع README للتنزيل." -ForegroundColor Yellow
+}
+New-Zip (Join-Path $release 'tahakkum-client.zip') $clientEntries
 
 # One script for the relay server, with the sources inside it. It carries only the license
 # PUBLIC key. Unix line endings: bash cannot run the file otherwise.

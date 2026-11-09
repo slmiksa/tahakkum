@@ -446,6 +446,23 @@ async function pageCompanies() {
       add.disabled = false;
     }
   });
+  function androidToggle(c) {
+    const btn = el("button", { class: "tiny" + (c.android_control ? " bad" : "") },
+      c.android_control ? "مفعّلة ✓" : "تفعيل");
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      error.textContent = "";
+      try {
+        must(await db.rpc("set_company_android", { p_company: c.id, p_on: !c.android_control }));
+        renderTab();
+      } catch (e) {
+        error.textContent = errorText(e);
+        btn.disabled = false;
+      }
+    });
+    return btn;
+  }
+
   content.replaceChildren(
     el("section", { class: "card stack" },
       el("h2", {}, "إضافة شركة"),
@@ -456,8 +473,9 @@ async function pageCompanies() {
       error),
     el("section", { class: "card" },
       el("div", { class: "head-row" }, el("h2", {}, "الشركات")),
-      table(["الاسم", "جهة التواصل", "أضيفت في"],
-        companies.map((c) => [c.name, c.contact || "—", ltr(day(c.created_at))]), "لا توجد شركات بعد.")));
+      el("p", { class: "muted small" }, "التحكم بشاشات أندرويد (TV) عبر IP: فعّله للشركة، ثم اختر الأجهزة المسموح لها من صفحة \"الأجهزة\"."),
+      table(["الاسم", "جهة التواصل", "شاشات أندرويد", "أضيفت في"],
+        companies.map((c) => [c.name, c.contact || "—", androidToggle(c), ltr(day(c.created_at))]), "لا توجد شركات بعد.")));
 }
 
 // -- codes and devices --
@@ -474,6 +492,24 @@ async function pageDevices() {
   const search = el("input", { type: "text", maxLength: 64 });
   const onlyActive = el("select", {}, el("option", { value: "active" }, "المفعّلة فقط"), el("option", { value: "all" }, "كل الأكواد"));
   const list = el("div");
+  const err = el("p", { class: "danger small" });
+
+  function androidCell(c) {
+    if (!c.activation_id) return "—";
+    const btn = el("button", { class: "tiny" + (c.device_android ? " bad" : "") }, c.device_android ? "مسموح ✓" : "سماح");
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      err.textContent = "";
+      try {
+        must(await db.rpc("set_device_android", { p_activation: c.activation_id, p_on: !c.device_android }));
+        load();
+      } catch (e) {
+        err.textContent = errorText(e);
+        btn.disabled = false;
+      }
+    });
+    return c.company_android ? btn : el("span", {}, btn, el("span", { class: "muted small" }, " فعّل للشركة"));
+  }
 
   async function load() {
     list.replaceChildren(el("p", { class: "muted" }, "جاري التحميل…"));
@@ -484,10 +520,10 @@ async function pageDevices() {
     if (term) query = query.or("code_hint.ilike.%" + term + "%,machine_name.ilike.%" + term + "%,last_ip.ilike.%" + term + "%");
     try {
       const rows = must(await query.order("last_seen_at", { ascending: false, nullsFirst: false }).limit(PAGE_SIZE));
-      list.replaceChildren(table(["الكود", "الشركة", "اسم الجهاز", "آخر IP", "آخر اتصال", "ينتهي", "الحالة", ""],
+      list.replaceChildren(table(["الكود", "الشركة", "اسم الجهاز", "آخر IP", "آخر اتصال", "ينتهي", "الحالة", "تحكم أندرويد", ""],
         rows.map((c) => [
           ltr("…" + c.code_hint, "mono"), c.company, c.machine_name ? ltr(c.machine_name) : "—", c.last_ip ? ltr(c.last_ip) : "—",
-          ltr(dateTime(c.last_seen_at)), ltr(day(c.expires_at)), codeState(c),
+          ltr(dateTime(c.last_seen_at)), ltr(day(c.expires_at)), codeState(c), androidCell(c),
           el("td", { class: "actions" },
             c.activation_id && el("button", { class: "tiny", onclick: () => releaseDevice(c, load) }, "فك الارتباط"),
             !c.code_revoked_at && el("button", { class: "tiny bad", onclick: () => revokeCode(c, load) }, "إلغاء الكود")),
@@ -509,6 +545,7 @@ async function pageDevices() {
       el("label", {}, "عرض", onlyActive),
       el("label", {}, "بحث: آخر 4 أحرف من الكود، أو اسم الجهاز، أو IP", search),
       el("button", { onclick: load }, "بحث")),
+    err,
     list));
   await load();
 }
@@ -543,6 +580,8 @@ const ACTIONS = {
   revoke_batch: "إلغاء دفعة",
   revoke_code: "إلغاء كود",
   release_activation: "فك ارتباط جهاز",
+  set_company_android: "تحكم أندرويد لشركة",
+  set_device_android: "تحكم أندرويد لجهاز",
   activate: "تفعيل جهاز",
   activation_refused_other_device: "محاولة تفعيل من جهاز آخر",
 };
@@ -563,6 +602,7 @@ function details(row) {
   if (d.months) parts.push(d.months + " شهر");
   if (d.machine) parts.push(d.machine);
   if (d.ip) parts.push(d.ip);
+  if (typeof d.on === "boolean") parts.push(d.on ? "تفعيل" : "إيقاف");
   if (parts.length === 0 && row.action === "create_company") parts.push(row.subject);
   return parts.join(" • ") || "—";
 }

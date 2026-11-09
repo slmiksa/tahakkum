@@ -162,10 +162,16 @@ namespace Tahakkum
             addContact.Click += delegate { EditContact(null, addressBox.Box.Text.Trim()); };
             connectCard.Controls.Add(addContact);
 
-            recentPanel.SetBounds(p, Theme.S(304), inner, connectCard.Height - Theme.S(316));
+            recentPanel.SetBounds(p, Theme.S(304), inner, connectCard.Height - Theme.S(316) - Theme.S(46));
             recentPanel.BackColor = Theme.Card;
             recentPanel.AutoScroll = true;
             connectCard.Controls.Add(recentPanel);
+
+            PillButton androidButton = new PillButton { Text = "التحكم بشاشة أندرويد (TV) عبر IP", Kind = ButtonKind.Secondary, Glyph = Theme.GlyphConnect, GlyphSize = 10f };
+            androidButton.Font = Theme.UiBold(9.5f);
+            androidButton.SetBounds(p, connectCard.Height - Theme.S(42), inner, Theme.S(34));
+            androidButton.Click += delegate { OpenAndroid(); };
+            connectCard.Controls.Add(androidButton);
 
             // ---- This machine card ----
             CardPanel hostCard = new CardPanel();
@@ -492,6 +498,21 @@ namespace Tahakkum
             using (AccessPasswordForm form = new AccessPasswordForm()) form.ShowDialog(this);
             RefreshPasswordButton();
             ApplyLockAccess();
+        }
+
+        void OpenAndroid()
+        {
+            if (!LicenseManager.IsValid && !OpenActivation()) return;
+            if (!LicenseManager.AndroidControlAllowed)
+            {
+                MessageBox.Show(this, "ميزة التحكم بشاشات أندرويد غير مفعّلة لهذا الجهاز. تُفعَّل من لوحة التحكم.", "شاشة أندرويد",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MessageBoxOptions.RightAlign | MessageBoxOptions.RtlReading);
+                return;
+            }
+            string prefill = addressBox.Box.Text.Trim();
+            using (AndroidConnectForm c = new AndroidConnectForm(prefill))
+                if (c.ShowDialog(this) == DialogResult.OK && c.Tool != null)
+                    new AndroidForm(c.Tool, c.Host).Show(this);
         }
 
         void CopyAddress()

@@ -354,3 +354,49 @@ test("admin actions are recorded", async () => {
   assert.equal(rows[0].action, "issue_batch");
   assert.equal(rows[0].actor, (adminClaims as { sub: string }).sub);
 });
+
+function tokenFields(token: string): string[] {
+  const bytes = Uint8Array.from(atob(token.split(".")[0].replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes).split("|");
+}
+
+test("Android control rides in the token only when both the company and the device are allowed", async () => {
+  const { codes } = await issue(1, 6);
+  const first = await activate(codes[0], DEVICE_A);
+  // handleActivate returns the code id only inside the signed token.
+  const codeId = tokenFields(first.body.token as string)[1];
+  const activation = (await db.query<{ id: string }>(
+    "select id from public.activations where code_id = $1 and released_at is null", [codeId])).rows[0].id;
+
+  // Off by default: six fields, no flag.
+  assert.equal(tokenFields(first.body.token as string).length, 6);
+
+  const refresh = () => handleRefresh({ code_id: codeId, device: DEVICE_A, secret: first.body.secret, machine: "PC-1" }, "x", service(), key);
+
+  // Company on but device off: still not allowed.
+  await admin("set_company_android", { p_company: company, p_on: true });
+  assert.equal(tokenFields((await refresh()).body.token as string).length, 6);
+
+  // Device on as well: the token now carries the 'a' flag, and still verifies.
+  await admin("set_device_android", { p_activation: activation, p_on: true });
+  const token = (await refresh()).body.token as string;
+  const fields = tokenFields(token);
+  assert.equal(fields.length, 7);
+  assert.equal(fields[6], "a");
+  const decode = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+  const [payload, signature] = token.split(".");
+  assert.ok(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, publicKey, decode(signature), decode(payload)));
+
+  // Turning the company off revokes it even while the device stays allowed.
+  await admin("set_company_android", { p_company: company, p_on: false });
+  assert.equal(tokenFields((await refresh()).body.token as string).length, 6);
+});
+
+test("only an admin with MFA may toggle Android control", async () => {
+  const anon = rpcAs(db, "anon");
+  const user = rpcAs(db, "authenticated", { sub: await addUser(db, false), aal: "aal2" });
+  const noMfa = rpcAs(db, "authenticated", { ...adminClaims, aal: "aal1" });
+  await callDenied(anon, "set_company_android", { p_company: company, p_on: true });
+  await callDenied(user, "set_company_android", { p_company: company, p_on: true });
+  await callDenied(noMfa, "set_device_android", { p_activation: company, p_on: true });
+});

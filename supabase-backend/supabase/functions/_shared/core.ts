@@ -48,10 +48,14 @@ export async function importSigningKey(privateJwk: JsonWebKey): Promise<CryptoKe
   return await crypto.subtle.importKey("jwk", privateJwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
 }
 
-// v1|code id|device|expiry|issued|company. The program verifies this offline with the public key.
-export async function signToken(key: CryptoKey, grant: { code_id: string; company: string; expires_at: string; server_time: string }, device: string): Promise<string> {
+// v1|code id|device|expiry|issued|company[|flags]. The program verifies this offline with the
+// public key. The flags field was added later, so a token without it still parses; 'a' means the
+// device may control Android TV screens over IP.
+export async function signToken(key: CryptoKey, grant: { code_id: string; company: string; expires_at: string; server_time: string; android_control?: boolean }, device: string): Promise<string> {
   const unix = (t: string) => Math.floor(new Date(t).getTime() / 1000);
-  const payload = ["v1", grant.code_id, device, unix(grant.expires_at), unix(grant.server_time), base64Url(encoder.encode(grant.company))].join("|");
+  const fields = ["v1", grant.code_id, device, String(unix(grant.expires_at)), String(unix(grant.server_time)), base64Url(encoder.encode(grant.company))];
+  if (grant.android_control) fields.push("a");
+  const payload = fields.join("|");
   const data = encoder.encode(payload);
   const signature = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, data));
   return base64Url(data) + "." + base64Url(signature);

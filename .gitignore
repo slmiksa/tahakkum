@@ -3,3 +3,7 @@ node_modules/
 # The license signing key. Anyone holding it can create valid licenses.
 supabase-backend/secrets/
 supabase-backend/supabase/.temp/
+
+# Android adb tool (download separately, never commit the binaries)
+client-program/platform-tools/
+client-program/vendor/

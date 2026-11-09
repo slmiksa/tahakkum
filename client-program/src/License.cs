@@ -109,6 +109,22 @@ namespace Tahakkum
 
         public static bool ExpiresSoon { get { return Required && IsValid && DaysLeft <= WarnDays; } }
 
+        // Whether this machine may control Android TV screens over IP. The dashboard turns the
+        // feature on per company and per device; the client learns it from the token
+        // (`AndroidControl` below). A local opt-in file is honoured too, for a device the owner
+        // tests before the dashboard entitlement reaches it.
+        public static bool AndroidControlAllowed
+        {
+            get
+            {
+                if (Required && !IsValid) return false;
+                LicenseToken t = Current;
+                if (t != null && t.AndroidControl) return true;
+                try { return System.IO.File.Exists(System.IO.Path.Combine(AppFiles.MachineDir, "android-control.on")); }
+                catch (Exception) { return false; }
+            }
+        }
+
         public static void Load()
         {
             if (!Required) return;

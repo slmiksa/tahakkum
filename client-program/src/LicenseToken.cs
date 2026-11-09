@@ -14,6 +14,8 @@ namespace Tahakkum
         public string Company;
         public DateTime ExpiresUtc;
         public DateTime IssuedUtc;
+        // Entitlement flags (optional 7th field). 'a' = may control Android TV screens over IP.
+        public bool AndroidControl;
 
         // Returns null unless the signature is valid for this public key.
         public static LicenseToken Parse(string raw, string publicX, string publicY)
@@ -34,7 +36,9 @@ namespace Tahakkum
                 }
 
                 string[] fields = Encoding.UTF8.GetString(data).Split('|');
-                if (fields.Length != 6 || fields[0] != "v1") return null;
+                // Six fields originally; a seventh flags field was appended later, so older tokens
+                // (and the relay, which shares this file) keep working.
+                if ((fields.Length != 6 && fields.Length != 7) || fields[0] != "v1") return null;
                 DateTime epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
                 return new LicenseToken
                 {
@@ -43,7 +47,8 @@ namespace Tahakkum
                     Device = fields[2],
                     ExpiresUtc = epoch.AddSeconds(long.Parse(fields[3])),
                     IssuedUtc = epoch.AddSeconds(long.Parse(fields[4])),
-                    Company = Encoding.UTF8.GetString(FromBase64Url(fields[5]))
+                    Company = Encoding.UTF8.GetString(FromBase64Url(fields[5])),
+                    AndroidControl = fields.Length >= 7 && fields[6].IndexOf('a') >= 0
                 };
             }
             catch (Exception ex)
