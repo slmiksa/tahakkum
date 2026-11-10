@@ -96,7 +96,16 @@ namespace Tahakkum
         {
             if (running) return;
             TcpListener l = TcpListener.Create(port);
-            l.ExclusiveAddressUse = true;
+            // Allow re-binding a port that a previous, unclean exit left behind (TIME_WAIT or a
+            // leaked socket), so re-enabling "accept requests" never needs a reboot. The session is
+            // still protected by consent, the access password and the host certificate regardless of
+            // who holds the port.
+            l.ExclusiveAddressUse = false;
+            l.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            // Do not let a child process (such as the bundled adb server, which keeps running) inherit
+            // this port and hold it open after the program closes — that was what jammed the port until
+            // a reboot.
+            try { Native.SetHandleInformation(l.Server.Handle, Native.HANDLE_FLAG_INHERIT, 0); } catch (Exception) { }
             l.Start(8);
             listener = l;
             running = true;

@@ -65,7 +65,17 @@ namespace Tahakkum
             if (running) return;
             try
             {
-                socket = new UdpClient(new IPEndPoint(IPAddress.Any, port));
+                // Reuse the address so a socket left behind by a previous, unclean exit does not
+                // block binding until a reboot. UdpClient binds in its constructor, so the option
+                // is set on a fresh socket before binding it here.
+                UdpClient c = new UdpClient();
+                c.ExclusiveAddressUse = false;
+                c.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                c.Client.Bind(new IPEndPoint(IPAddress.Any, port));
+                // Keep a child process (the bundled adb server lingers in the background) from
+                // inheriting this socket and holding the port open after the program closes.
+                try { Native.SetHandleInformation(c.Client.Handle, Native.HANDLE_FLAG_INHERIT, 0); } catch (Exception) { }
+                socket = c;
             }
             catch (SocketException ex)
             {
