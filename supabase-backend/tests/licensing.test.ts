@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { before, test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
 import { addUser, asRole, newSigningKey, openDatabase, rpcAs } from "./harness.ts";
-import { generateCode, handleActivate, handleExport, handleIssue as issueWith, handleRefresh, importCodesKey, importSigningKey, normalizeCode, sha256Hex } from "../supabase/functions/_shared/core.ts";
+import { badAdminCredentials, generateCode, handleActivate, handleExport, handleIssue as issueWith, handleRefresh, importCodesKey, importSigningKey, normalizeCode, sha256Hex } from "../supabase/functions/_shared/core.ts";
 
 let db: PGlite;
 let key: CryptoKey;
@@ -189,7 +189,7 @@ test("machine names cannot carry control or bidi characters", async () => {
 
 // ---- who can do what ----
 
-const tables = ["admins", "companies", "license_batches", "license_codes", "activations", "activation_failures", "audit_log", "batch_overview", "code_overview"];
+const tables = ["admins", "companies", "license_batches", "license_codes", "activations", "activation_failures", "audit_log", "batch_overview", "code_overview", "company_admins", "company_admin_overview"];
 
 async function rowsVisible(role: string, claims: object | null, table: string): Promise<number | string> {
   return await asRole(db, role, claims, async () => {
@@ -399,4 +399,78 @@ test("only an admin with MFA may toggle Android control", async () => {
   await callDenied(anon, "set_company_android", { p_company: company, p_on: true });
   await callDenied(user, "set_company_android", { p_company: company, p_on: true });
   await callDenied(noMfa, "set_device_android", { p_activation: company, p_on: true });
+});
+
+// ---- company administrators ----
+
+// Issues a batch for an arbitrary company (the shared issue() helper always uses the main company).
+async function issueFor(companyId: string) {
+  const r = await handleIssue({ company_id: companyId, quantity: 1, months: 6, note: "" }, admin);
+  const code = (r.body.csv as string).split("\r\n").filter((l) => l.startsWith("\"TKM-"))[0].split(",")[0].replace(/"/g, "");
+  return code;
+}
+
+async function activationId(result: Awaited<ReturnType<typeof activate>>) {
+  const codeId = tokenFields(result.body.token as string)[1];
+  return (await db.query<{ id: string }>("select id from public.activations where code_id = $1 and released_at is null", [codeId])).rows[0].id;
+}
+
+test("a company admin sees only their own company, grants TV per device, and releases a device", async () => {
+  const companyB = await admin("create_company", { p_name: "شركة ثانية", p_contact: "" }) as string;
+  const actA = await activationId(await activate(await issueFor(company), "1".repeat(64)));
+  const actB = await activationId(await activate(await issueFor(companyB), "2".repeat(64)));
+
+  const caUser = await addUser(db, false);
+  await db.query("insert into public.company_admins (user_id, company_id, username) values ($1, $2, $3)", [caUser, company, "ca-one"]);
+  const claims = { sub: caUser, aal: "aal2" };
+  const ca = rpcAs(db, "authenticated", claims);
+
+  // The dashboard learns the role: not the owner, scoped to the one company.
+  const role = await ca("my_role", {}) as { owner: boolean; company_id: string };
+  assert.equal(role.owner, false);
+  assert.equal(role.company_id, company);
+
+  // Every visible device belongs to that company, never company B's.
+  const seen = await asRole(db, "authenticated", claims, async () => (await db.query<{ company_id: string }>("select company_id from public.code_overview")).rows);
+  assert.ok(seen.length > 0 && seen.every((r) => r.company_id === company));
+
+  // Grants TV for its own device, but not for company B's, and cannot flip the company-level switch.
+  await ca("set_device_android", { p_activation: actA, p_on: true });
+  await assert.rejects(ca("set_device_android", { p_activation: actB, p_on: true }), (e: { code?: string }) => e.code === "42501");
+  await callDenied(ca, "set_company_android", { p_company: company, p_on: true });
+
+  // Releases its own device, not company B's.
+  await assert.rejects(ca("release_activation", { p_activation: actB }), (e: { code?: string }) => e.code === "42501");
+  await ca("release_activation", { p_activation: actA });
+  assert.ok((await db.query<{ released_at: Date | null }>("select released_at from public.activations where id = $1", [actA])).rows[0].released_at);
+
+  // Without MFA it is nobody, exactly like the owner.
+  assert.equal(await rowsVisible("authenticated", { sub: caUser, aal: "aal1" }, "code_overview"), 0);
+  await callDenied(rpcAs(db, "authenticated", { sub: caUser, aal: "aal1" }), "set_device_android", { p_activation: actB, p_on: true });
+});
+
+test("only the owner may create or delete a company-admin account", async () => {
+  const target = await addUser(db, false);
+  const caUser = await addUser(db, false);
+  await db.query("insert into public.company_admins (user_id, company_id, username) values ($1, $2, $3)", [caUser, company, "ca-two"]);
+  const ca = rpcAs(db, "authenticated", { sub: caUser, aal: "aal2" });
+  const plain = rpcAs(db, "authenticated", { sub: await addUser(db, false), aal: "aal2" });
+
+  await callDenied(plain, "create_company_admin", { p_user: target, p_company: company, p_username: "x" });
+  await callDenied(ca, "create_company_admin", { p_user: target, p_company: company, p_username: "x" });
+  await callDenied(ca, "delete_company_admin", { p_user: caUser });
+
+  await admin("create_company_admin", { p_user: target, p_company: company, p_username: "made-by-owner" });
+  assert.equal((await db.query("select 1 from public.company_admins where user_id = $1", [target])).rows.length, 1);
+  await admin("delete_company_admin", { p_user: target });
+  assert.equal((await db.query("select 1 from public.company_admins where user_id = $1", [target])).rows.length, 0);
+});
+
+test("company-admin credentials are validated before an account is created", () => {
+  assert.equal(badAdminCredentials("alnoor-it", "longenough"), null);
+  assert.equal(badAdminCredentials("a", "longenough"), "bad_username");
+  assert.equal(badAdminCredentials("bad name", "longenough"), "bad_username");
+  assert.equal(badAdminCredentials("وليد", "longenough"), "bad_username");
+  assert.equal(badAdminCredentials("good", "short"), "bad_password");
+  assert.equal(badAdminCredentials("good", "x".repeat(73)), "bad_password");
 });

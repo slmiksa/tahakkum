@@ -27,6 +27,7 @@ namespace Tahakkum
         public const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
         public const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
         public const uint KEYEVENTF_KEYUP = 0x0002;
+        public const uint KEYEVENTF_UNICODE = 0x0004;
         public const uint KEYEVENTF_SCANCODE = 0x0008;
 
         public const int SM_XVIRTUALSCREEN = 76;
@@ -140,6 +141,11 @@ namespace Tahakkum
         [DllImport("user32.dll")] public static extern bool DrawIconEx(IntPtr hdc, int x, int y, IntPtr hIcon, int cx, int cy, int step, IntPtr brush, int flags);
         [DllImport("user32.dll", SetLastError = true)] public static extern uint SendInput(uint count, INPUT[] inputs, int size);
         [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
+        [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vk);
+        [DllImport("user32.dll")] public static extern short GetKeyState(int vk);
+        [DllImport("user32.dll")] public static extern IntPtr GetKeyboardLayout(uint thread);
+        [DllImport("user32.dll")] public static extern uint MapVirtualKey(uint code, uint mapType);
+        [DllImport("user32.dll")] public static extern int ToUnicodeEx(uint vk, uint scan, byte[] state, [Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder buffer, int size, uint flags, IntPtr layout);
         [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr SetWindowsHookEx(int id, LowLevelProc proc, IntPtr module, uint thread);
         [DllImport("user32.dll")] public static extern bool UnhookWindowsHookEx(IntPtr hook);
         [DllImport("user32.dll")] public static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);

@@ -1,5 +1,5 @@
 @echo off
-rem Publishes the database, the keys, and the four functions to the linked Supabase project.
+rem Publishes the database, the keys, and the five functions to the linked Supabase project.
 rem Safe to run again: applied database changes are skipped, and functions are replaced.
 chcp 65001 >nul
 cd /d "%~dp0.."
@@ -16,7 +16,7 @@ if errorlevel 1 goto failed
 
 echo.
 echo === 3 of 3: functions ===
-call npx.cmd supabase functions deploy activate refresh issue-batch export-batch --use-api --no-verify-jwt --yes
+call npx.cmd supabase functions deploy activate refresh issue-batch export-batch admin-users --use-api --no-verify-jwt --yes
 if errorlevel 1 goto failed
 
 echo.

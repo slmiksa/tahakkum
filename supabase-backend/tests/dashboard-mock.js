@@ -27,8 +27,13 @@
       { id: 2, action: "activate", subject: "k1", details: { company: "شركة النور للتقنية", machine: "DESK-1361", ip: "198.51.100.24" }, at: iso(-1) },
       { id: 1, action: "issue_batch", subject: "b1", details: { company: "شركة النور للتقنية", quantity: 1000, months: 6 }, at: iso(-60) },
     ],
+    company_admin_overview: [
+      { user_id: "u1", username: "alnoor-it", company_id: "c1", company: "شركة النور للتقنية", created_at: iso(-20) },
+    ],
   };
   window.__mock = state;
+  // Add ?as=company to the preview URL to see what a company admin sees instead of the owner.
+  const previewAs = new URLSearchParams(location.search).get("as");
 
   function query(table) {
     let rows = state[table].slice();
@@ -71,6 +76,10 @@
       const r = state.code_overview.find((x) => x.activation_id === a.p_activation);
       if (r) r.device_android = a.p_on;
     },
+    my_role() {
+      if (previewAs === "company") return { owner: false, company_id: "c1", company: "شركة النور للتقنية" };
+      return { owner: true, company_id: null, company: null };
+    },
   };
 
   window.supabase = {
@@ -80,6 +89,18 @@
       functions: {
         invoke: async (name, { body }) => {
           if (name === "export-batch") return { data: { ok: true, batch: { company: "شركة", quantity: 1 }, csv: "x" }, error: null };
+          if (name === "admin-users") {
+            if (body.action === "create") {
+              const company = state.companies.find((c) => c.id === body.company_id);
+              state.company_admin_overview.unshift({ user_id: "u" + (state.company_admin_overview.length + 1), username: body.username, company_id: body.company_id, company: company ? company.name : "", created_at: iso(0) });
+              return { data: { ok: true }, error: null };
+            }
+            if (body.action === "delete") {
+              state.company_admin_overview = state.company_admin_overview.filter((a) => a.user_id !== body.user_id);
+              return { data: { ok: true }, error: null };
+            }
+            return { data: { ok: true }, error: null };
+          }
           const company = state.companies.find((c) => c.id === body.company_id);
           const batch = { batch_id: "b" + (state.batch_overview.length + 1), company: company.name, quantity: body.quantity, months: body.months, issued_at: iso(0), expires_at: iso(body.months * 30) };
           state.batch_overview.unshift({ id: batch.batch_id, company_id: company.id, company: company.name, quantity: body.quantity, months: body.months, note: body.note, issued_at: batch.issued_at, expires_at: batch.expires_at, revoked_at: null, active_devices: 0, revoked_codes: 0 });

@@ -207,3 +207,16 @@ export function clientIp(headers: Headers): string {
   const forwarded = headers.get("x-forwarded-for") ?? "";
   return cleanText(forwarded.split(",")[0], 64) || "unknown";
 }
+
+// ---- company-admin logins (used by the admin-users function) ----
+
+// A login name is stored as username@tahakkum.local, so it must be a plain, email-safe handle.
+export const ADMIN_USERNAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]{1,30}$/;
+
+// Returns an error key, or null when the credentials are acceptable. bcrypt (what the auth server
+// uses) only looks at the first 72 bytes, so a longer password would silently ignore the rest.
+export function badAdminCredentials(username: string, password: string): string | null {
+  if (!ADMIN_USERNAME.test(username)) return "bad_username";
+  if (password.length < 8 || password.length > 72) return "bad_password";
+  return null;
+}

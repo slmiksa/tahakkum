@@ -568,7 +568,9 @@ namespace Tahakkum
                         int scan = r.ReadInt32();
                         bool extended = r.ReadBoolean();
                         bool kdown = r.ReadBoolean();
-                        if (secureInput) lockLink.SendInput(Pack.Build(w => { w.Write(LockMsg.InKey); w.Write(vk); w.Write(scan); w.Write(extended); w.Write(kdown); }));
+                        // Older viewers do not send the character; only read it when it is there.
+                        int ch = (r.BaseStream.Position + 2 <= r.BaseStream.Length) ? r.ReadUInt16() : 0;
+                        if (secureInput) lockLink.SendInput(Pack.Build(w => { w.Write(LockMsg.InKey); w.Write(vk); w.Write(scan); w.Write(extended); w.Write(kdown); w.Write((ushort)ch); }));
                         else injector.Key(vk, scan, extended, kdown);
                         break;
                     }

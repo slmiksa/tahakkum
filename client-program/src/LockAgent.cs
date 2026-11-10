@@ -207,7 +207,16 @@ namespace Tahakkum
                                 int vk = r.ReadInt32();
                                 int scan = r.ReadInt32();
                                 bool ext = r.ReadBoolean();
-                                injector.Key(vk, scan, ext, r.ReadBoolean());
+                                bool kdown = r.ReadBoolean();
+                                int ch = (r.BaseStream.Position + 2 <= r.BaseStream.Length) ? r.ReadUInt16() : 0;
+                                // A printable key is typed by its character, so the secure desktop's own
+                                // keyboard layout cannot turn the password into something else. One press
+                                // per key-down; the matching key-up is nothing to replay for a character.
+                                if (ch != 0)
+                                {
+                                    if (kdown) { injector.Char(ch, true); injector.Char(ch, false); }
+                                }
+                                else injector.Key(vk, scan, ext, kdown);
                                 break;
                         }
                     }

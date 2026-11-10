@@ -11,6 +11,10 @@ namespace Tahakkum
     {
         static readonly int InputSize = Marshal.SizeOf(typeof(Native.INPUT));
 
+        // Marks a held entry as a Unicode character rather than a virtual key, so ReleaseAll
+        // lets it up the same way it was pressed. Key ids never reach this bit.
+        const int UnicodeFlag = 1 << 28;
+
         readonly object gate = new object();
         readonly HashSet<int> heldKeys = new HashSet<int>();
         readonly HashSet<int> heldButtons = new HashSet<int>();
@@ -76,12 +80,28 @@ namespace Tahakkum
             }
         }
 
+        // Types a character by its Unicode value, so the result does not depend on the keyboard
+        // layout that happens to be active on the target desktop. Used at the lock screen, where the
+        // secure desktop's layout may not match the password the viewer actually typed.
+        public void Char(int ch, bool down)
+        {
+            if (ch <= 0 || ch > 0xFFFF) return;
+            lock (gate)
+            {
+                if (down) heldKeys.Add(ch | UnicodeFlag); else heldKeys.Remove(ch | UnicodeFlag);
+                SendChar(ch, down);
+            }
+        }
+
         public void ReleaseAll()
         {
             lock (gate)
             {
                 foreach (int k in heldKeys)
-                    SendKey(k & 0xFF, (k >> 8) & 0xFFFF, (k & (1 << 24)) != 0, false);
+                {
+                    if ((k & UnicodeFlag) != 0) SendChar(k & 0xFFFF, false);
+                    else SendKey(k & 0xFF, (k >> 8) & 0xFFFF, (k & (1 << 24)) != 0, false);
+                }
                 heldKeys.Clear();
                 List<int> buttons = new List<int>(heldButtons);
                 heldButtons.Clear();
@@ -149,6 +169,19 @@ namespace Tahakkum
                 input[0].u.ki.wScan = (ushort)scan;
                 flags |= Native.KEYEVENTF_SCANCODE;
             }
+            input[0].u.ki.dwFlags = flags;
+            Native.SendInput(1, input, InputSize);
+        }
+
+        static void SendChar(int ch, bool down)
+        {
+            if (!Pass("key")) return;
+            Native.INPUT[] input = new Native.INPUT[1];
+            input[0].type = Native.INPUT_KEYBOARD;
+            input[0].u.ki.wVk = 0;
+            input[0].u.ki.wScan = (ushort)ch;
+            uint flags = Native.KEYEVENTF_UNICODE;
+            if (!down) flags |= Native.KEYEVENTF_KEYUP;
             input[0].u.ki.dwFlags = flags;
             Native.SendInput(1, input, InputSize);
         }

@@ -17,6 +17,10 @@ const ERRORS = {
   bad_months: "المدة يجب أن تكون بين 1 و 120 شهراً.",
   bad_company: "اختر شركة أولاً.",
   bad_batch: "تعذر تحديد الدفعة.",
+  bad_username: "اسم المستخدم يجب أن يكون حروفاً وأرقاماً إنجليزية (مع . _ -) بطول 2 إلى 31.",
+  bad_password: "كلمة المرور يجب أن تكون بين 8 و 72 حرفاً.",
+  username_taken: "اسم المستخدم هذا مستخدم من قبل.",
+  not_a_company_admin: "هذا الحساب ليس مدير شركة.",
 };
 
 function el(tag, attrs, ...children) {
@@ -210,8 +214,8 @@ async function screenMfaEnroll() {
 
 function screenNotAdmin() {
   show(el("div", { class: "center" }, el("div", { class: "card auth" },
-    el("h1", {}, "هذا الحساب ليس مديراً"),
-    el("p", { class: "muted small" }, "دخلت بنجاح، لكن الحساب غير مضاف إلى جدول المدراء في قاعدة البيانات. أضفه من محرر SQL في Supabase ثم أعد تحميل الصفحة."),
+    el("h1", {}, "لا صلاحية لهذا الحساب"),
+    el("p", { class: "muted small" }, "دخلت بنجاح، لكن الحساب غير مربوط بأي صلاحية: ليس مالكاً للوحة ولا مدير شركة. راجع المالك لإضافتك."),
     el("button", { onclick: signOut }, "خروج"))));
 }
 
@@ -232,10 +236,12 @@ async function route() {
     for (const f of factors.all) if (f.status !== "verified") await db.auth.mfa.unenroll({ factorId: f.id });
     return screenMfaEnroll();
   }
-  // Without this check a non-admin would just see empty pages, which looks like a working dashboard.
-  const { data: isAdmin } = await db.rpc("is_admin");
-  if (!isAdmin) return screenNotAdmin();
-  return showShell();
+  // The owner sees the full dashboard; a company admin sees only their own company's devices. Without
+  // this a login with no role would just see empty pages, which looks like a working dashboard.
+  const { data: role } = await db.rpc("my_role");
+  if (role && role.owner) return showShell();
+  if (role && role.company_id) return showCompanyShell(role);
+  return screenNotAdmin();
 }
 
 // ---- pages ----
@@ -245,6 +251,7 @@ const tabs = [
   { id: "batches", title: "الدفعات", render: pageBatches },
   { id: "companies", title: "الشركات", render: pageCompanies },
   { id: "devices", title: "الأكواد والأجهزة", render: pageDevices },
+  { id: "admins", title: "مدراء الشركات", render: pageAdmins },
   { id: "audit", title: "السجل", render: pageAudit },
 ];
 let activeTab = "batches";
@@ -270,6 +277,18 @@ async function renderTab() {
   } catch (e) {
     content.replaceChildren(el("div", { class: "alert" }, errorText(e)));
   }
+}
+
+// A company admin gets no tabs: one page, their own company's devices.
+function showCompanyShell(role) {
+  show(
+    el("header", { class: "top" },
+      el("div", { class: "brand" }, el("img", { class: "brand-mark", src: "logo.svg", alt: "" }), el("h1", {}, "تحكّم — " + role.company)),
+      el("span", { class: "muted small" }, "مدير الشركة"),
+      el("button", { onclick: signOut }, "خروج")),
+    content);
+  content.replaceChildren(el("p", { class: "muted" }, "جاري التحميل…"));
+  pageDevices({ companyId: role.company_id }).catch((e) => content.replaceChildren(el("div", { class: "alert" }, errorText(e))));
 }
 
 function table(headers, rows, emptyText) {
@@ -486,11 +505,14 @@ function codeState(c) {
   return c.activation_id ? pill("ok", "مفعّل") : pill("idle", "لم يُفعّل");
 }
 
-async function pageDevices() {
-  const companies = await db.from("companies").select("id, name").order("name").then(must);
+// scope is null for the owner (every company, full actions) or { companyId } for a company admin,
+// who sees only their own company and may grant TV control or release a device, but not revoke a code.
+async function pageDevices(scope) {
+  const companies = scope ? [] : await db.from("companies").select("id, name").order("name").then(must);
   const company = el("select", {}, el("option", { value: "" }, "كل الشركات"), companies.map((c) => el("option", { value: c.id }, c.name)));
   const search = el("input", { type: "text", maxLength: 64 });
   const onlyActive = el("select", {}, el("option", { value: "active" }, "المفعّلة فقط"), el("option", { value: "all" }, "كل الأكواد"));
+  const banner = el("div");
   const list = el("div");
   const err = el("p", { class: "danger small" });
 
@@ -508,26 +530,40 @@ async function pageDevices() {
         btn.disabled = false;
       }
     });
-    return c.company_android ? btn : el("span", {}, btn, el("span", { class: "muted small" }, " فعّل للشركة"));
+    // When the company feature is off the toggle has no effect yet: the owner can turn it on; a company
+    // admin must ask the owner (the provider) to enable it for the whole company first.
+    if (c.company_android) return btn;
+    return el("span", {}, btn, el("span", { class: "muted small" }, scope ? " بانتظار تفعيل الشركة" : " فعّل للشركة"));
   }
 
   async function load() {
     list.replaceChildren(el("p", { class: "muted" }, "جاري التحميل…"));
     let query = db.from("code_overview").select("*");
-    if (company.value) query = query.eq("company_id", company.value);
+    if (scope) query = query.eq("company_id", scope.companyId);
+    else if (company.value) query = query.eq("company_id", company.value);
     if (onlyActive.value === "active") query = query.not("activation_id", "is", null);
     const term = search.value.trim().replace(/[%_,()]/g, "");
     if (term) query = query.or("code_hint.ilike.%" + term + "%,machine_name.ilike.%" + term + "%,last_ip.ilike.%" + term + "%");
     try {
       const rows = must(await query.order("last_seen_at", { ascending: false, nullsFirst: false }).limit(PAGE_SIZE));
-      list.replaceChildren(table(["الكود", "الشركة", "اسم الجهاز", "آخر IP", "آخر اتصال", "ينتهي", "الحالة", "تحكم أندرويد", ""],
+      if (scope) {
+        const off = rows.length > 0 && !rows[0].company_android;
+        banner.replaceChildren(off ? el("div", { class: "alert" }, "التحكم بشاشات أندرويد (TV) غير مفعّل لشركتك بعد. راجع مزوّد الخدمة لتفعيله، ثم اختر الأجهزة المسموح لها.") : "");
+      }
+      // The owner column shows the company; a company admin already knows it, so that column is dropped.
+      const headers = scope
+        ? ["الكود", "اسم الجهاز", "آخر IP", "آخر اتصال", "ينتهي", "الحالة", "تحكم TV", ""]
+        : ["الكود", "الشركة", "اسم الجهاز", "آخر IP", "آخر اتصال", "ينتهي", "الحالة", "تحكم أندرويد", ""];
+      list.replaceChildren(table(headers,
         rows.map((c) => [
-          ltr("…" + c.code_hint, "mono"), c.company, c.machine_name ? ltr(c.machine_name) : "—", c.last_ip ? ltr(c.last_ip) : "—",
+          ltr("…" + c.code_hint, "mono"),
+          scope ? null : c.company,
+          c.machine_name ? ltr(c.machine_name) : "—", c.last_ip ? ltr(c.last_ip) : "—",
           ltr(dateTime(c.last_seen_at)), ltr(day(c.expires_at)), codeState(c), androidCell(c),
           el("td", { class: "actions" },
             c.activation_id && el("button", { class: "tiny", onclick: () => releaseDevice(c, load) }, "فك الارتباط"),
-            !c.code_revoked_at && el("button", { class: "tiny bad", onclick: () => revokeCode(c, load) }, "إلغاء الكود")),
-        ]), "لا توجد نتائج."),
+            !scope && !c.code_revoked_at && el("button", { class: "tiny bad", onclick: () => revokeCode(c, load) }, "إلغاء الكود")),
+        ].filter((cell) => cell !== null)), "لا توجد نتائج."),
         rows.length === PAGE_SIZE ? el("p", { class: "muted small" }, "تظهر أول " + PAGE_SIZE + " نتيجة. ضيّق البحث لرؤية البقية.") : "");
     } catch (e) {
       list.replaceChildren(el("div", { class: "alert" }, errorText(e)));
@@ -539,13 +575,14 @@ async function pageDevices() {
   search.addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });
 
   content.replaceChildren(el("section", { class: "card stack" },
-    el("h2", {}, "الأكواد والأجهزة"),
+    el("h2", {}, scope ? "أجهزة شركتك" : "الأكواد والأجهزة"),
     el("div", { class: "form-grid" },
-      el("label", {}, "الشركة", company),
+      scope ? null : el("label", {}, "الشركة", company),
       el("label", {}, "عرض", onlyActive),
       el("label", {}, "بحث: آخر 4 أحرف من الكود، أو اسم الجهاز، أو IP", search),
       el("button", { onclick: load }, "بحث")),
     err,
+    banner,
     list));
   await load();
 }
@@ -570,6 +607,109 @@ function revokeCode(c, reload) {
     });
 }
 
+// -- company admins --
+
+async function pageAdmins() {
+  const [companies, admins] = await Promise.all([
+    db.from("companies").select("id, name").order("name").then(must),
+    db.from("company_admin_overview").select("*").order("created_at", { ascending: false }).then(must),
+  ]);
+  content.replaceChildren(adminForm(companies), el("section", { class: "card" },
+    el("div", { class: "head-row" }, el("h2", {}, "حسابات مدراء الشركات")),
+    el("p", { class: "muted small" }, "لكل حساب صلاحية شركة واحدة فقط: يرى أجهزتها، ويمنح تحكم TV لكل جهاز، ويفك ارتباط جهاز. ويُطلب منه إعداد التحقق بخطوتين عند أول دخول."),
+    table(["اسم المستخدم", "الشركة", "أضيف في", ""],
+      admins.map((a) => [
+        ltr(a.username, "mono"), a.company, ltr(day(a.created_at)),
+        el("td", { class: "actions" },
+          el("button", { class: "tiny", onclick: () => resetAdmin(a) }, "كلمة المرور"),
+          el("button", { class: "tiny bad", onclick: () => deleteAdmin(a) }, "حذف")),
+      ]), "لم تُنشئ أي حساب بعد.")));
+}
+
+function adminForm(companies) {
+  if (companies.length === 0)
+    return el("section", { class: "card" }, el("h2", {}, "إضافة مدير شركة"), el("p", { class: "muted", style: "margin-top:8px" }, "أضف شركة أولاً من صفحة الشركات."));
+
+  const company = el("select", {}, companies.map((c) => el("option", { value: c.id }, c.name)));
+  const username = el("input", { type: "text", maxLength: 31, dir: "ltr", autocomplete: "off" });
+  const password = el("input", { type: "text", maxLength: 72, dir: "ltr", autocomplete: "off" });
+  const error = el("p", { class: "danger small" });
+  const done = el("div");
+  const add = el("button", { class: "primary" }, "إنشاء الحساب");
+
+  add.addEventListener("click", async () => {
+    add.disabled = true;
+    error.textContent = "";
+    done.replaceChildren();
+    try {
+      const { data, error: failed } = await db.functions.invoke("admin-users", {
+        body: { action: "create", username: username.value.trim(), password: password.value, company_id: company.value },
+      });
+      if (failed) throw await functionError(failed);
+      if (!data.ok) throw new Error(data.error);
+      const name = username.value.trim();
+      done.replaceChildren(el("div", { class: "notice stack" },
+        el("div", {}, el("strong", {}, "أُنشئ حساب " + name + ". "), "سلّمه اسم المستخدم وكلمة المرور، وسيُعدّ التحقق بخطوتين عند أول دخول."),
+        el("p", { class: "small" }, "يسجّل الدخول من نفس رابط هذه اللوحة.")));
+      username.value = "";
+      password.value = "";
+      await refreshAdminList();
+    } catch (e) {
+      error.textContent = errorText(e);
+    }
+    add.disabled = false;
+  });
+
+  return el("section", { class: "card stack" },
+    el("h2", {}, "إضافة مدير شركة"),
+    el("div", { class: "form-grid" },
+      el("label", {}, "الشركة", company),
+      el("label", {}, "اسم المستخدم", username),
+      el("label", {}, "كلمة المرور", password),
+      add),
+    el("p", { class: "muted small" }, "اسم المستخدم: حروف وأرقام إنجليزية (و . _ -). كلمة المرور: 8 أحرف فأكثر."),
+    error, done);
+}
+
+async function refreshAdminList() {
+  const admins = await db.from("company_admin_overview").select("*").order("created_at", { ascending: false }).then(must);
+  content.lastElementChild.replaceChildren(
+    el("div", { class: "head-row" }, el("h2", {}, "حسابات مدراء الشركات")),
+    el("p", { class: "muted small" }, "لكل حساب صلاحية شركة واحدة فقط: يرى أجهزتها، ويمنح تحكم TV لكل جهاز، ويفك ارتباط جهاز. ويُطلب منه إعداد التحقق بخطوتين عند أول دخول."),
+    table(["اسم المستخدم", "الشركة", "أضيف في", ""],
+      admins.map((a) => [
+        ltr(a.username, "mono"), a.company, ltr(day(a.created_at)),
+        el("td", { class: "actions" },
+          el("button", { class: "tiny", onclick: () => resetAdmin(a) }, "كلمة المرور"),
+          el("button", { class: "tiny bad", onclick: () => deleteAdmin(a) }, "حذف")),
+      ]), "لم تُنشئ أي حساب بعد."));
+}
+
+function resetAdmin(a) {
+  const password = el("input", { type: "text", maxLength: 72, dir: "ltr", autocomplete: "off" });
+  confirmDialog("تغيير كلمة المرور",
+    "كلمة مرور جديدة لحساب " + a.username + " (شركة " + a.company + "). الحساب يبقى كما هو، وتتوقف كلمة المرور القديمة.",
+    "حفظ",
+    async () => {
+      const { data, error: failed } = await db.functions.invoke("admin-users", { body: { action: "reset", user_id: a.user_id, password: password.value } });
+      if (failed) throw await functionError(failed);
+      if (!data.ok) throw new Error(data.error);
+    },
+    el("label", { style: "margin-top:14px" }, "كلمة المرور الجديدة", password));
+}
+
+function deleteAdmin(a) {
+  confirmDialog("حذف الحساب",
+    "سيُحذف حساب " + a.username + " نهائياً ولن يستطيع الدخول. لا يتأثر أي جهاز أو كود، ولا يمكن التراجع.",
+    "حذف الحساب",
+    async () => {
+      const { data, error: failed } = await db.functions.invoke("admin-users", { body: { action: "delete", user_id: a.user_id } });
+      if (failed) throw await functionError(failed);
+      if (!data.ok) throw new Error(data.error);
+      renderTab();
+    });
+}
+
 // -- audit --
 
 const ACTIONS = {
@@ -582,6 +722,8 @@ const ACTIONS = {
   release_activation: "فك ارتباط جهاز",
   set_company_android: "تحكم أندرويد لشركة",
   set_device_android: "تحكم أندرويد لجهاز",
+  create_company_admin: "إضافة مدير شركة",
+  delete_company_admin: "حذف مدير شركة",
   activate: "تفعيل جهاز",
   activation_refused_other_device: "محاولة تفعيل من جهاز آخر",
 };
@@ -601,6 +743,7 @@ function details(row) {
   if (d.quantity) parts.push(d.quantity + " كود");
   if (d.months) parts.push(d.months + " شهر");
   if (d.machine) parts.push(d.machine);
+  if (d.username) parts.push(d.username);
   if (d.ip) parts.push(d.ip);
   if (typeof d.on === "boolean") parts.push(d.on ? "تفعيل" : "إيقاف");
   if (parts.length === 0 && row.action === "create_company") parts.push(row.subject);

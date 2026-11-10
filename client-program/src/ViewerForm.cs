@@ -319,8 +319,8 @@ namespace Tahakkum
         void SendCombo(int[] vks)
         {
             if (viewOnly) return;
-            foreach (int vk in vks) SendKey(vk, 0, IsExtendedVk(vk), true);
-            for (int i = vks.Length - 1; i >= 0; i--) SendKey(vks[i], 0, IsExtendedVk(vks[i]), false);
+            foreach (int vk in vks) SendKey(vk, 0, IsExtendedVk(vk), true, 0);
+            for (int i = vks.Length - 1; i >= 0; i--) SendKey(vks[i], 0, IsExtendedVk(vks[i]), false, 0);
         }
 
         static bool IsExtendedVk(int vk)
@@ -610,7 +610,7 @@ namespace Tahakkum
             conn.Send(Msg.MouseWheel, Pack.Build(w => { w.Write(delta); w.Write(horizontal); }));
         }
 
-        void SendKey(int vk, int scan, bool extended, bool down)
+        void SendKey(int vk, int scan, bool extended, bool down, int ch)
         {
             if (conn.IsClosed) return;
             conn.Send(Msg.Key, Pack.Build(w =>
@@ -619,7 +619,41 @@ namespace Tahakkum
                 w.Write(scan);
                 w.Write(extended);
                 w.Write(down);
+                // The character the viewer's own keyboard layout produces, so the host can type it
+                // verbatim at the lock screen regardless of the layout active there. 0 = not printable.
+                w.Write((ushort)ch);
             }));
+        }
+
+        // Works out the printable character for a key-down, using this machine's active layout and
+        // the live state of the modifier keys. Control characters (Enter, Tab, Backspace, Esc) and
+        // dead keys return 0, so they travel as virtual keys and keep working as navigation.
+        static int CharFor(int vk, int scan)
+        {
+            try
+            {
+                byte[] state = new byte[256];
+                if ((Native.GetAsyncKeyState(0x10) & 0x8000) != 0) state[0x10] = 0x80;  // Shift
+                if ((Native.GetAsyncKeyState(0xA0) & 0x8000) != 0) state[0xA0] = 0x80;
+                if ((Native.GetAsyncKeyState(0xA1) & 0x8000) != 0) state[0xA1] = 0x80;
+                if ((Native.GetAsyncKeyState(0x11) & 0x8000) != 0) state[0x11] = 0x80;  // Ctrl
+                if ((Native.GetAsyncKeyState(0xA2) & 0x8000) != 0) state[0xA2] = 0x80;
+                if ((Native.GetAsyncKeyState(0xA3) & 0x8000) != 0) state[0xA3] = 0x80;
+                if ((Native.GetAsyncKeyState(0x12) & 0x8000) != 0) state[0x12] = 0x80;  // Alt / AltGr
+                if ((Native.GetAsyncKeyState(0xA4) & 0x8000) != 0) state[0xA4] = 0x80;
+                if ((Native.GetAsyncKeyState(0xA5) & 0x8000) != 0) state[0xA5] = 0x80;
+                if ((Native.GetKeyState(0x14) & 1) != 0) state[0x14] = 1;               // CapsLock toggle
+                System.Text.StringBuilder sb = new System.Text.StringBuilder(8);
+                // Flag 4 = do not disturb the real keyboard state (so dead keys keep working locally).
+                int rc = Native.ToUnicodeEx((uint)vk, (uint)scan, state, sb, sb.Capacity, 4, Native.GetKeyboardLayout(0));
+                if (rc == 1 && sb.Length > 0)
+                {
+                    char c = sb[0];
+                    if (c >= 0x20 && c != 0x7F) return c;
+                }
+            }
+            catch (Exception) { }
+            return 0;
         }
 
         protected override void WndProc(ref Message m)
@@ -654,7 +688,7 @@ namespace Tahakkum
                     {
                         long id = ((long)vk << 32) | ((long)scan << 1) | (ext ? 1L : 0L);
                         if (down) heldKeys.Add(id); else heldKeys.Remove(id);
-                        SendKey(vk, scan, ext, down);
+                        SendKey(vk, scan, ext, down, down ? CharFor(vk, scan) : 0);
                         return new IntPtr(1);
                     }
                 }
@@ -691,7 +725,7 @@ namespace Tahakkum
         void ReleaseHeldKeys()
         {
             foreach (long id in heldKeys)
-                SendKey((int)(id >> 32), (int)((id & 0xFFFFFFFFL) >> 1), (id & 1) != 0, false);
+                SendKey((int)(id >> 32), (int)((id & 0xFFFFFFFFL) >> 1), (id & 1) != 0, false, 0);
             heldKeys.Clear();
         }
 
