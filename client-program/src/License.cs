@@ -234,7 +234,7 @@ namespace Tahakkum
 
         public static void Activate(string code)
         {
-            if (!Required) throw new LicenseFailure("هذه النسخة لا تتطلب التفعيل.");
+            if (!Required) throw new LicenseFailure(Lang.L("هذه النسخة لا تتطلب التفعيل.", "This build doesn't require activation."));
             ApiResponse r;
             try
             {
@@ -243,12 +243,12 @@ namespace Tahakkum
             catch (Exception ex)
             {
                 if (!(ex is WebException || ex is IOException || ex is SerializationException)) throw;
-                throw new LicenseFailure("تعذر الوصول إلى خادم التفعيل. تأكد من اتصالك بالإنترنت، وأن جدار الشركة الناري يسمح به.");
+                throw new LicenseFailure(Lang.L("تعذر الوصول إلى خادم التفعيل. تأكد من اتصالك بالإنترنت، وأن جدار الشركة الناري يسمح به.", "Couldn't reach the activation server. Check your internet connection and that the company firewall allows it."));
             }
             if (!r.Ok) throw new LicenseFailure(ErrorText(r.Error));
 
             LicenseToken t = LicenseToken.Parse(r.Token ?? "", Settings.PublicX, Settings.PublicY);
-            if (t == null || t.Device != Device) throw new LicenseFailure("رد غير صالح من خادم التفعيل.");
+            if (t == null || t.Device != Device) throw new LicenseFailure(Lang.L("رد غير صالح من خادم التفعيل.", "Invalid response from the activation server."));
             lock (gate)
             {
                 current = t;
@@ -258,7 +258,7 @@ namespace Tahakkum
             catch (Exception ex)
             {
                 if (!(ex is IOException || ex is UnauthorizedAccessException || ex is CryptographicException)) throw;
-                throw new LicenseFailure("تم التفعيل لكن تعذر حفظ الرخصة على هذا الجهاز: " + ex.Message);
+                throw new LicenseFailure(Lang.L("تم التفعيل لكن تعذر حفظ الرخصة على هذا الجهاز: ", "Activated, but the license couldn't be saved on this device: ") + ex.Message);
             }
             AppFiles.Log("تم تفعيل البرنامج لشركة " + t.Company + " حتى " + t.ExpiresUtc.ToString("yyyy-MM-dd"));
             Raise();
@@ -268,12 +268,12 @@ namespace Tahakkum
         {
             switch (error)
             {
-                case "invalid_code": return "كود التفعيل غير صحيح. تأكد من كتابته كما هو في الملف.";
-                case "revoked": return "تم إلغاء هذا الكود. تواصل مع مسؤول النظام في شركتك.";
-                case "expired": return "انتهت مدة هذا الكود.";
-                case "other_device": return "هذا الكود مفعّل على جهاز آخر. لنقله تواصل مع مسؤول النظام.";
-                case "rate_limited": return "محاولات خاطئة كثيرة. حاول بعد 10 دقائق.";
-                default: return "تعذر إتمام التفعيل. حاول لاحقاً.";
+                case "invalid_code": return Lang.L("كود التفعيل غير صحيح. تأكد من كتابته كما هو في الملف.", "The activation code is incorrect. Make sure it matches the file exactly.");
+                case "revoked": return Lang.L("تم إلغاء هذا الكود. تواصل مع مسؤول النظام في شركتك.", "This code has been revoked. Contact your company's system administrator.");
+                case "expired": return Lang.L("انتهت مدة هذا الكود.", "This code's term has ended.");
+                case "other_device": return Lang.L("هذا الكود مفعّل على جهاز آخر. لنقله تواصل مع مسؤول النظام.", "This code is active on another device. To move it, contact the system administrator.");
+                case "rate_limited": return Lang.L("محاولات خاطئة كثيرة. حاول بعد 10 دقائق.", "Too many failed attempts. Try again after 10 minutes.");
+                default: return Lang.L("تعذر إتمام التفعيل. حاول لاحقاً.", "Couldn't complete activation. Try again later.");
             }
         }
 

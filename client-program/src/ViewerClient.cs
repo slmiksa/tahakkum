@@ -66,26 +66,26 @@ namespace Tahakkum
         public Connection ConnectById(string id, Action<string> onWaiting, Func<string, bool> confirmChangedIdentity, PasswordPrompt askPassword)
         {
             RelayConfig config = RelayConfig.Load();
-            if (config == null) throw new ConnectFailure("لم يُضبط خادم الاتصال عبر الإنترنت في هذه النسخة.");
+            if (config == null) throw new ConnectFailure(Lang.L("لم يُضبط خادم الاتصال عبر الإنترنت في هذه النسخة.", "The internet relay server isn't configured in this build."));
             TcpClient client = new TcpClient(System.Net.Sockets.AddressFamily.InterNetwork);
             tcp = client;
             return Guarded(client, id, () =>
             {
-                string notReached = "تعذر الوصول إلى خادم الاتصال. تأكد من اتصالك بالإنترنت.";
+                string notReached = Lang.L("تعذر الوصول إلى خادم الاتصال. تأكد من اتصالك بالإنترنت.", "Couldn't reach the relay server. Check your internet connection.");
                 Open(client, config.Host, config.Port, notReached, notReached, notReached);
                 Stream relay;
                 try { relay = config.OpenStream(client); }
                 catch (Exception ex)
                 {
-                    if (ex is IOException || ex is AuthenticationException) throw new ConnectFailure("تعذر التحقق من هوية خادم الاتصال.");
+                    if (ex is IOException || ex is AuthenticationException) throw new ConnectFailure(Lang.L("تعذر التحقق من هوية خادم الاتصال.", "Couldn't verify the relay server's identity."));
                     throw;
                 }
                 Connection.WritePacket(relay, Msg.RelayDial, Pack.Build(w => w.Write(id)));
                 client.ReceiveTimeout = 20000;
                 Packet answer = Connection.ReadPacket(relay, Proto.MaxPreApproval);
-                if (answer.Type == Msg.RelayOffline) throw new ConnectFailure("هذا الجهاز غير متصل الآن، أو أن المعرّف غير صحيح.");
-                if (answer.Type == Msg.RelayRefused) throw new ConnectFailure("محاولات كثيرة خلال وقت قصير. حاول بعد دقيقة.");
-                if (answer.Type != Msg.RelayGo) throw new ConnectFailure("رد غير متوقع من خادم الاتصال.");
+                if (answer.Type == Msg.RelayOffline) throw new ConnectFailure(Lang.L("هذا الجهاز غير متصل الآن، أو أن المعرّف غير صحيح.", "This device isn't online now, or the ID is incorrect."));
+                if (answer.Type == Msg.RelayRefused) throw new ConnectFailure(Lang.L("محاولات كثيرة خلال وقت قصير. حاول بعد دقيقة.", "Too many attempts in a short time. Try again in a minute."));
+                if (answer.Type != Msg.RelayGo) throw new ConnectFailure(Lang.L("رد غير متوقع من خادم الاتصال.", "Unexpected response from the relay server."));
                 string expected;
                 using (BinaryReader r = Pack.Read(answer.Data)) expected = r.ReadString();
                 return Handshake(client, relay, "id:" + id, expected, onWaiting, confirmChangedIdentity, askPassword);
@@ -100,9 +100,9 @@ namespace Tahakkum
             return Guarded(client, host, () =>
             {
                 Open(client, host, port,
-                    "تعذر العثور على هذا العنوان. تأكد من كتابة IP بشكل صحيح.",
-                    "لا يوجد رد من الجهاز. تأكد أنه يعمل وعلى نفس الشبكة، وأن الجدار الناري يسمح بالمنفذ " + port + ".",
-                    "تعذر الوصول إلى الجهاز. تأكد من الشبكة والجدار الناري.");
+                    Lang.L("تعذر العثور على هذا العنوان. تأكد من كتابة IP بشكل صحيح.", "Couldn't find this address. Make sure the IP is correct."),
+                    Lang.L("لا يوجد رد من الجهاز. تأكد أنه يعمل وعلى نفس الشبكة، وأن الجدار الناري يسمح بالمنفذ ", "No response from the device. Make sure it's on and on the same network, and that the firewall allows port ") + port + ".",
+                    Lang.L("تعذر الوصول إلى الجهاز. تأكد من الشبكة والجدار الناري.", "Couldn't reach the device. Check the network and firewall."));
                 return Handshake(client, client.GetStream(), host, null, onWaiting, confirmChangedIdentity, askPassword);
             });
         }
@@ -127,7 +127,7 @@ namespace Tahakkum
             catch (SocketException ex)
             {
                 if (ex.SocketErrorCode == SocketError.ConnectionRefused && notFound != unreachable)
-                    throw new ConnectFailure("الجهاز موجود لكن البرنامج غير مشغّل عليه، أو استقبال الطلبات متوقف.");
+                    throw new ConnectFailure(Lang.L("الجهاز موجود لكن البرنامج غير مشغّل عليه، أو استقبال الطلبات متوقف.", "The device is reachable but the program isn't running on it, or accepting requests is off."));
                 if (ex.SocketErrorCode == SocketError.HostNotFound || ex.SocketErrorCode == SocketError.NoData)
                     throw new ConnectFailure(notFound);
                 throw new ConnectFailure(unreachable);
@@ -157,7 +157,7 @@ namespace Tahakkum
                 if (cancelled) throw new ConnectFailure("");
                 if (!(ex is IOException || ex is ObjectDisposedException))
                     AppFiles.Log("خطأ أثناء الاتصال بـ " + target + ": " + ex);
-                throw new ConnectFailure("انقطع الاتصال بالجهاز قبل اكتمال الطلب.");
+                throw new ConnectFailure(Lang.L("انقطع الاتصال بالجهاز قبل اكتمال الطلب.", "The connection to the device dropped before the request completed."));
             }
         }
 
@@ -178,18 +178,18 @@ namespace Tahakkum
             catch (Exception ex)
             {
                 if (ex is IOException || ex is AuthenticationException)
-                    throw new ConnectFailure("هذا العنوان لا يشغّل برنامج تحكّم، أو تعذر إنشاء اتصال مشفّر معه.");
+                    throw new ConnectFailure(Lang.L("هذا العنوان لا يشغّل برنامج تحكّم، أو تعذر إنشاء اتصال مشفّر معه.", "This address isn't running Tahakkum, or a secure connection couldn't be established."));
                 throw;
             }
 
             string fingerprint = Identity.Fingerprint(seen);
             Code = Identity.VerificationCode(seen);
             if (expectedFingerprint != null && expectedFingerprint != fingerprint)
-                throw new ConnectFailure("هوية الجهاز لا تطابق ما سجّله خادم الاتصال، فتم إيقاف الاتصال حمايةً لك.");
+                throw new ConnectFailure(Lang.L("هوية الجهاز لا تطابق ما سجّله خادم الاتصال، فتم إيقاف الاتصال حمايةً لك.", "The device identity doesn't match what the relay recorded, so the connection was stopped to protect you."));
             string pinned = KnownHosts.Get(pinKey);
             if (pinned != null && pinned != fingerprint)
             {
-                if (!confirmChangedIdentity(Code)) throw new ConnectFailure("تم إلغاء الاتصال لأن هوية الجهاز تغيرت.");
+                if (!confirmChangedIdentity(Code)) throw new ConnectFailure(Lang.L("تم إلغاء الاتصال لأن هوية الجهاز تغيرت.", "The connection was cancelled because the device identity changed."));
             }
             KnownHosts.Set(pinKey, fingerprint);
 
@@ -231,7 +231,7 @@ namespace Tahakkum
                 }
                 else
                 {
-                    throw new ConnectFailure("رد غير متوقع من الجهاز.");
+                    throw new ConnectFailure(Lang.L("رد غير متوقع من الجهاز.", "Unexpected response from the device."));
                 }
             }
         }
@@ -249,7 +249,7 @@ namespace Tahakkum
                 failedBefore = r.ReadBoolean();
             }
             // The cost comes from the other side, so a hostile peer must not be able to freeze this machine.
-            if (!AccessPassword.ValidIterations(iterations)) throw new ConnectFailure("رد غير متوقع من الجهاز.");
+            if (!AccessPassword.ValidIterations(iterations)) throw new ConnectFailure(Lang.L("رد غير متوقع من الجهاز.", "Unexpected response from the device."));
 
             string password = askPassword(Code, failedBefore);
             if (password == null) throw new ConnectFailure("");
@@ -266,14 +266,14 @@ namespace Tahakkum
         {
             switch (reason)
             {
-                case DenyReason.Rejected: return "رفض الشخص أمام الشاشة طلب التحكم.";
-                case DenyReason.Busy: return "وصل هذا الجهاز إلى الحد الأقصى من المتصلين (" + Proto.MaxViewers + ")، أو أن صاحبه أوقف استقبال طلبات جديدة.";
-                case DenyReason.Timeout: return "لم يرد أحد على الطلب خلال " + Proto.ConsentSeconds + " ثانية.";
-                case DenyReason.Version: return "إصدار البرنامج على الجهاز الآخر مختلف. ثبّت نفس الإصدار على الجهازين.";
-                case DenyReason.Cooldown: return "تم رفض طلبك قبل قليل. حاول مرة أخرى بعد بضع ثوانٍ.";
-                case DenyReason.BadPassword: return "كلمة السر غير صحيحة وتجاوزت عدد المحاولات.";
-                case DenyReason.NotLicensed: return "البرنامج على الجهاز الآخر غير مفعّل أو انتهت رخصته.";
-                default: return "تم رفض الطلب.";
+                case DenyReason.Rejected: return Lang.L("رفض الشخص أمام الشاشة طلب التحكم.", "The person at the screen declined the control request.");
+                case DenyReason.Busy: return Lang.L("وصل هذا الجهاز إلى الحد الأقصى من المتصلين (", "This device reached the maximum number of connections (") + Proto.MaxViewers + Lang.L(")، أو أن صاحبه أوقف استقبال طلبات جديدة.", "), or its owner stopped accepting new requests.");
+                case DenyReason.Timeout: return Lang.L("لم يرد أحد على الطلب خلال ", "No one answered the request within ") + Proto.ConsentSeconds + Lang.L(" ثانية.", " seconds.");
+                case DenyReason.Version: return Lang.L("إصدار البرنامج على الجهاز الآخر مختلف. ثبّت نفس الإصدار على الجهازين.", "The program version on the other device is different. Install the same version on both.");
+                case DenyReason.Cooldown: return Lang.L("تم رفض طلبك قبل قليل. حاول مرة أخرى بعد بضع ثوانٍ.", "Your request was just declined. Try again in a few seconds.");
+                case DenyReason.BadPassword: return Lang.L("كلمة السر غير صحيحة وتجاوزت عدد المحاولات.", "The password is incorrect and the attempt limit was exceeded.");
+                case DenyReason.NotLicensed: return Lang.L("البرنامج على الجهاز الآخر غير مفعّل أو انتهت رخصته.", "The program on the other device isn't activated or its license expired.");
+                default: return Lang.L("تم رفض الطلب.", "The request was declined.");
             }
         }
     }

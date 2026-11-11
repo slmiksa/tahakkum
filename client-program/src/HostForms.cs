@@ -22,7 +22,7 @@ namespace Tahakkum
         public ConsentForm(ConsentRequest request)
         {
             this.request = request;
-            Text = "طلب تحكم بهذه الشاشة";
+            Text = Lang.L("طلب تحكم بهذه الشاشة", "Request to control this screen");
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -30,7 +30,7 @@ namespace Tahakkum
             TopMost = true;
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Theme.Bg;
-            RightToLeft = RightToLeft.Yes;
+            RightToLeft = Lang.Rtl;
             ClientSize = new Size(Theme.S(500), Theme.S(420));
             Icon = Program.AppIcon;
 
@@ -41,13 +41,13 @@ namespace Tahakkum
             shield.SetBounds(w - m - Theme.S(48), Theme.S(24), Theme.S(48), Theme.S(48));
             Controls.Add(shield);
 
-            Label title = Theme.MakeLabel("شخص يطلب التحكم بهذه الشاشة", Theme.UiBold(14f), Theme.Text, ContentAlignment.MiddleRight);
+            Label title = Theme.MakeLabel(Lang.L("شخص يطلب التحكم بهذه الشاشة", "Someone is requesting to control this screen"), Theme.UiBold(14f), Theme.Text, ContentAlignment.MiddleRight);
             title.SetBounds(m, Theme.S(22), w - 2 * m - Theme.S(60), Theme.S(30));
             Controls.Add(title);
 
             string subText = request.Watching > 0
-                ? "يشاهد شاشتك الآن " + request.Watching + (request.Watching == 1 ? " شخص" : " أشخاص") + "، وهذا الطلب سينضم إليهم."
-                : "لن يرى شاشتك أو يتحكم بها إلا إذا وافقت.";
+                ? Lang.L("يشاهد شاشتك الآن ", "Currently watching your screen: ") + request.Watching + (request.Watching == 1 ? Lang.L(" شخص", " person") : Lang.L(" أشخاص", " people")) + Lang.L("، وهذا الطلب سينضم إليهم.", ", and this request will join them.")
+                : Lang.L("لن يرى شاشتك أو يتحكم بها إلا إذا وافقت.", "They won't see or control your screen unless you approve.");
             Label sub = Theme.MakeLabel(subText, Theme.Ui(10f), request.Watching > 0 ? Theme.Warning : Theme.Muted, ContentAlignment.MiddleRight);
             sub.SetBounds(m, Theme.S(52), w - 2 * m - Theme.S(60), Theme.S(24));
             Controls.Add(sub);
@@ -55,14 +55,14 @@ namespace Tahakkum
             CardPanel info = new CardPanel();
             info.SetBounds(m, Theme.S(92), w - 2 * m, Theme.S(158));
             Controls.Add(info);
-            AddRow(info, 0, "عنوان IP", request.RemoteIp, true);
-            AddRow(info, 1, "اسم الجهاز", request.Machine.Length > 0 ? request.Machine : "غير معروف", false);
-            string who = request.User.Length > 0 ? request.User : "غير معروف";
+            AddRow(info, 0, Lang.L("عنوان IP", "IP address"), request.RemoteIp, true);
+            AddRow(info, 1, Lang.L("اسم الجهاز", "Device name"), request.Machine.Length > 0 ? request.Machine : Lang.L("غير معروف", "Unknown"), false);
+            string who = request.User.Length > 0 ? request.User : Lang.L("غير معروف", "Unknown");
             if (request.Nick.Length > 0) who = request.Nick + "  (" + who + ")";
-            AddRow(info, 2, "الاسم", who, request.Nick.Length > 0);
-            AddRow(info, 3, "رمز التحقق", request.Code, true);
+            AddRow(info, 2, Lang.L("الاسم", "Name"), who, request.Nick.Length > 0);
+            AddRow(info, 3, Lang.L("رمز التحقق", "Verification code"), request.Code, true);
 
-            Label note = Theme.MakeLabel("عند الموافقة سيرى شاشتك ويتحكم بها، ويمكنه طلب نقل الملفات. يمكنك إنهاء الجلسة في أي وقت. تأكد أن رمز التحقق يطابق ما عنده.", Theme.Ui(9.5f), Theme.Muted, ContentAlignment.TopRight);
+            Label note = Theme.MakeLabel(Lang.L("عند الموافقة سيرى شاشتك ويتحكم بها، ويمكنه طلب نقل الملفات. يمكنك إنهاء الجلسة في أي وقت. تأكد أن رمز التحقق يطابق ما عنده.", "When you approve, they'll see and control your screen and can request file transfers. You can end the session anytime. Make sure the verification code matches theirs."), Theme.Ui(9.5f), Theme.Muted, ContentAlignment.TopRight);
             note.SetBounds(m, Theme.S(260), w - 2 * m, Theme.S(50));
             Controls.Add(note);
 
@@ -71,13 +71,13 @@ namespace Tahakkum
             Controls.Add(countdown);
 
             int bw = (w - 2 * m - Theme.S(12)) / 2;
-            approve = new PillButton { Text = "موافق", Kind = ButtonKind.Success, Glyph = Theme.GlyphCheck };
+            approve = new PillButton { Text = Lang.L("موافق", "Approve"), Kind = ButtonKind.Success, Glyph = Theme.GlyphCheck };
             approve.SetBounds(w - m - bw, Theme.S(346), bw, Theme.S(50));
             approve.Enabled = false;
             approve.Click += delegate { Answer(true); };
             Controls.Add(approve);
 
-            deny = new PillButton { Text = "رفض", Kind = ButtonKind.Secondary, Glyph = Theme.GlyphClose };
+            deny = new PillButton { Text = Lang.L("رفض", "Decline"), Kind = ButtonKind.Secondary, Glyph = Theme.GlyphClose };
             deny.SetBounds(m, Theme.S(346), bw, Theme.S(50));
             deny.Click += delegate { Answer(false); };
             Controls.Add(deny);
@@ -111,7 +111,7 @@ namespace Tahakkum
             double elapsed = (DateTime.UtcNow - started).TotalMilliseconds;
             if (elapsed >= ArmDelayMs && !approve.Enabled) approve.Enabled = true;
             int left = Math.Max(0, Proto.ConsentSeconds - (int)(elapsed / 1000));
-            countdown.Text = "سيتم الرفض تلقائياً بعد " + left + " ثانية";
+            countdown.Text = Lang.L("سيتم الرفض تلقائياً بعد ", "It will be declined automatically in ") + left + Lang.L(" ثانية", " seconds");
             if (left <= 0) Answer(false);
         }
 
@@ -173,7 +173,7 @@ namespace Tahakkum
         {
             this.desk = desk;
             this.transfersFor = transfersFor;
-            Text = "جلسة تحكم نشطة";
+            Text = Lang.L("جلسة تحكم نشطة", "Active control session");
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             TopMost = true;
@@ -203,21 +203,21 @@ namespace Tahakkum
 
             viewerMenu = Theme.MakeMenu();
             viewerMenu.ShowCheckMargin = false;
-            viewers = new PillButton { Text = "المتصلون", Kind = ButtonKind.Secondary, Glyph = Theme.GlyphView, GlyphSize = 9f };
+            viewers = new PillButton { Text = Lang.L("المتصلون", "Connected"), Kind = ButtonKind.Secondary, Glyph = Theme.GlyphView, GlyphSize = 9f };
             viewers.Font = Theme.UiBold(9f);
             viewers.SetBounds(Theme.S(230), Theme.S(9), Theme.S(154), Theme.S(34));
             viewers.TabStop = false;
             viewers.Click += delegate { ShowViewers(); };
             Controls.Add(viewers);
 
-            pause = new PillButton { Text = "إيقاف التحكم", Kind = ButtonKind.Secondary, Glyph = Theme.GlyphPause, GlyphSize = 9f };
+            pause = new PillButton { Text = Lang.L("إيقاف التحكم", "Pause control"), Kind = ButtonKind.Secondary, Glyph = Theme.GlyphPause, GlyphSize = 9f };
             pause.Font = Theme.UiBold(9f);
             pause.SetBounds(Theme.S(100), Theme.S(9), Theme.S(124), Theme.S(34));
             pause.TabStop = false;
             pause.Click += delegate { TogglePause(); };
             Controls.Add(pause);
 
-            PillButton end = new PillButton { Text = "إنهاء", Kind = ButtonKind.Danger, Glyph = Theme.GlyphClose, GlyphSize = 9f };
+            PillButton end = new PillButton { Text = Lang.L("إنهاء", "End"), Kind = ButtonKind.Danger, Glyph = Theme.GlyphClose, GlyphSize = 9f };
             end.Font = Theme.UiBold(9f);
             end.SetBounds(Theme.S(10), Theme.S(9), Theme.S(84), Theme.S(34));
             end.TabStop = false;
@@ -241,9 +241,9 @@ namespace Tahakkum
         {
             HostSession[] all = desk.Sessions;
             HostSession controller = desk.Controller;
-            if (all.Length == 1) caption.Text = "يتحكم بهذه الشاشة: " + Who(all[0]);
-            else if (all.Length > 1) caption.Text = "يشاهد " + all.Length + " • يتحكم: " + (controller != null ? controller.DisplayName : "لا أحد");
-            viewers.Text = "المتصلون (" + all.Length + ")";
+            if (all.Length == 1) caption.Text = Lang.L("يتحكم بهذه الشاشة: ", "Controlling this screen: ") + Who(all[0]);
+            else if (all.Length > 1) caption.Text = Lang.L("يشاهد ", "Watching ") + all.Length + Lang.L(" • يتحكم: ", " • controlling: ") + (controller != null ? controller.DisplayName : Lang.L("لا أحد", "no one"));
+            viewers.Text = Lang.L("المتصلون (", "Connected (") + all.Length + ")";
             viewers.Invalidate();
         }
 
@@ -255,17 +255,17 @@ namespace Tahakkum
             foreach (HostSession item in desk.Sessions)
             {
                 HostSession s = item;
-                ToolStripMenuItem entry = new ToolStripMenuItem(Who(s) + (s == controller ? "  —  يتحكم الآن" : ""));
-                ToolStripMenuItem give = new ToolStripMenuItem("إعطاء التحكم");
+                ToolStripMenuItem entry = new ToolStripMenuItem(Who(s) + (s == controller ? Lang.L("  —  يتحكم الآن", "  —  controlling now") : ""));
+                ToolStripMenuItem give = new ToolStripMenuItem(Lang.L("إعطاء التحكم", "Give control"));
                 give.Enabled = s != controller;
                 give.Click += delegate { desk.Give(s); };
-                ToolStripMenuItem files = new ToolStripMenuItem("إرسال ملفات");
+                ToolStripMenuItem files = new ToolStripMenuItem(Lang.L("إرسال ملفات", "Send files"));
                 files.Click += delegate
                 {
                     FileTransferWindow w = transfersFor(s);
                     if (w != null) w.PickAndSend(this);
                 };
-                ToolStripMenuItem drop = new ToolStripMenuItem("فصل هذا الشخص");
+                ToolStripMenuItem drop = new ToolStripMenuItem(Lang.L("فصل هذا الشخص", "Disconnect this person"));
                 drop.Click += delegate { s.End(); };
                 entry.DropDownItems.AddRange(new ToolStripItem[] { give, files, drop });
                 StyleDropDown(entry);
@@ -279,7 +279,7 @@ namespace Tahakkum
             ToolStripDropDownMenu menu = (ToolStripDropDownMenu)item.DropDown;
             menu.Renderer = new DarkMenuRenderer();
             menu.ShowImageMargin = false;
-            menu.RightToLeft = RightToLeft.Yes;
+            menu.RightToLeft = Lang.Rtl;
             menu.BackColor = Theme.Card;
             menu.ForeColor = Theme.Text;
         }
@@ -288,7 +288,7 @@ namespace Tahakkum
         {
             paused = !paused;
             foreach (HostSession s in desk.Sessions) s.SetPaused(paused);
-            pause.Text = paused ? "استئناف التحكم" : "إيقاف التحكم";
+            pause.Text = paused ? Lang.L("استئناف التحكم", "Resume control") : Lang.L("إيقاف التحكم", "Pause control");
             pause.Glyph = paused ? Theme.GlyphPlay : Theme.GlyphPause;
             pause.Invalidate();
         }

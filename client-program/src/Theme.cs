@@ -109,7 +109,7 @@ namespace Tahakkum
             l.BackColor = Color.Transparent;
             l.TextAlign = align;
             l.AutoSize = false;
-            l.RightToLeft = RightToLeft.Yes;
+            l.RightToLeft = Lang.Rtl;
             l.UseMnemonic = false;
             return l;
         }
@@ -118,7 +118,7 @@ namespace Tahakkum
         {
             ContextMenuStrip m = new ContextMenuStrip();
             m.Renderer = new DarkMenuRenderer();
-            m.RightToLeft = RightToLeft.Yes;
+            m.RightToLeft = Lang.Rtl;
             m.ShowImageMargin = false;
             m.ShowCheckMargin = true;
             m.Font = Ui(10f);

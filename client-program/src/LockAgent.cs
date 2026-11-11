@@ -115,6 +115,7 @@ namespace Tahakkum
                     {
                         capturing = secure;
                         channel.Write(LockMsg.State, new byte[] { (byte)(secure ? 1 : 0) });
+                        LockLaunch.Log("secure desktop = " + secure + " (desktop: " + name + ")");
                         if (!secure && capturer != null) { capturer.Dispose(); capturer = null; }
                     }
 
@@ -173,6 +174,16 @@ namespace Tahakkum
             }
         }
 
+        // Diagnostics: records the first handful of keystrokes that reach the secure desktop, so a
+        // failure to type the password can be told apart from a failure to deliver the keys at all.
+        static int keyLogged;
+        static void LogKey(int vk, int scan, bool down)
+        {
+            if (keyLogged >= 16) return;
+            keyLogged++;
+            LockLaunch.Log("inkey vk=0x" + vk.ToString("X2") + " scan=0x" + scan.ToString("X2") + " down=" + down);
+        }
+
         static void DrainInput(InputInjector injector)
         {
             while (true)
@@ -208,15 +219,11 @@ namespace Tahakkum
                                 int scan = r.ReadInt32();
                                 bool ext = r.ReadBoolean();
                                 bool kdown = r.ReadBoolean();
-                                int ch = (r.BaseStream.Position + 2 <= r.BaseStream.Length) ? r.ReadUInt16() : 0;
-                                // A printable key is typed by its character, so the secure desktop's own
-                                // keyboard layout cannot turn the password into something else. One press
-                                // per key-down; the matching key-up is nothing to replay for a character.
-                                if (ch != 0)
-                                {
-                                    if (kdown) { injector.Char(ch, true); injector.Char(ch, false); }
-                                }
-                                else injector.Key(vk, scan, ext, kdown);
+                                if (r.BaseStream.Position + 2 <= r.BaseStream.Length) r.ReadUInt16(); // optional char field, unused here
+                                // Scan-code injection is the method the secure desktop (LogonUI) reliably
+                                // accepts; Unicode injection is filtered there.
+                                injector.Key(vk, scan, ext, kdown);
+                                LogKey(vk, scan, kdown);
                                 break;
                         }
                     }

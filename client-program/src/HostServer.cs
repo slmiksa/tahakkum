@@ -477,11 +477,22 @@ namespace Tahakkum
             }
         }
 
+        // Diagnostics: the first few keystrokes this session forwards to the lock-screen agent, so a
+        // typing problem at the lock screen shows whether the keys left this process at all.
+        int secureKeyLog;
+        void LogSecureKey(int vk, int scan, bool down)
+        {
+            if (secureKeyLog >= 16) return;
+            secureKeyLog++;
+            LockLaunch.Log("host: forwarded key vk=0x" + vk.ToString("X2") + " scan=0x" + scan.ToString("X2") + " down=" + down);
+        }
+
         // Start relaying the agent's secure-desktop frames to this viewer. Idempotent.
         void EnterSecure()
         {
             if (secureRelay) return;
             secureRelay = true;
+            LockLaunch.Log("host: secure relay on for " + RemoteIp);
             onLockInfo = p => { try { conn.Send(Msg.ScreenInfo, p); } catch (Exception) { } };
             onLockFrame = p => { try { conn.Send(Msg.Frame, p); } catch (Exception) { } };
             lockLink.ScreenInfoReceived += onLockInfo;
@@ -579,7 +590,7 @@ namespace Tahakkum
                         bool kdown = r.ReadBoolean();
                         // Older viewers do not send the character; only read it when it is there.
                         int ch = (r.BaseStream.Position + 2 <= r.BaseStream.Length) ? r.ReadUInt16() : 0;
-                        if (secureInput) lockLink.SendInput(Pack.Build(w => { w.Write(LockMsg.InKey); w.Write(vk); w.Write(scan); w.Write(extended); w.Write(kdown); w.Write((ushort)ch); }));
+                        if (secureInput) { LogSecureKey(vk, scan, kdown); lockLink.SendInput(Pack.Build(w => { w.Write(LockMsg.InKey); w.Write(vk); w.Write(scan); w.Write(extended); w.Write(kdown); w.Write((ushort)ch); })); }
                         else injector.Key(vk, scan, extended, kdown);
                         break;
                     }

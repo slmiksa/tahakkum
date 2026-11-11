@@ -41,6 +41,7 @@ namespace Tahakkum
             MainForm.ShowMessage = Native.RegisterWindowMessage("Tahakkum.ShowMainWindow");
             AppIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
 
+            Lang.Load();
             LicenseManager.Load();
 
             // For IT departments deploying to many machines. Exit code 0 means activated.
@@ -97,7 +98,8 @@ namespace Tahakkum
         static bool AcquireSingleInstance(string[] args)
         {
             bool created = false;
-            bool restarting = args.Any(a => string.Equals(a, "/elevated-restart", StringComparison.OrdinalIgnoreCase));
+            bool restarting = args.Any(a => string.Equals(a, "/elevated-restart", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(a, "/restarted", StringComparison.OrdinalIgnoreCase));
             int attempts = restarting ? 20 : 1;
             for (int i = 0; i < attempts && !created; i++)
             {
@@ -118,6 +120,17 @@ namespace Tahakkum
             try { instance.ReleaseMutex(); instance.Dispose(); }
             catch (Exception) { }
             instance = null;
+        }
+
+        // Saves the language choice and restarts the program so every window is rebuilt in it.
+        public static void SwitchLanguage(bool english)
+        {
+            if (english == Lang.English) return;
+            Lang.Save(english);
+            ReleaseSingleInstance();
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Application.ExecutablePath, "/restarted") { UseShellExecute = true }); }
+            catch (Exception) { }
+            Application.Exit();
         }
     }
 }

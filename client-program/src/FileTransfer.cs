@@ -394,7 +394,7 @@ namespace Tahakkum
                             {
                                 incoming = null;
                                 job.Transfer.State = TransferState.Completed;
-                                job.Transfer.Message = "تم الحفظ في مجلد التنزيلات\\Tahakkum.";
+                                job.Transfer.Message = Lang.L("تم الحفظ في مجلد التنزيلات\\Tahakkum.", "Saved to the Downloads\\Tahakkum folder.");
                             }
                         }
                     }

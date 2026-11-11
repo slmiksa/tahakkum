@@ -30,7 +30,7 @@ namespace Tahakkum
         {
             this.service = service;
             this.offer = offer;
-            Text = "طلب إرسال ملفات";
+            Text = Lang.L("طلب إرسال ملفات", "File transfer request");
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -38,7 +38,7 @@ namespace Tahakkum
             TopMost = true;
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Theme.Bg;
-            RightToLeft = RightToLeft.Yes;
+            RightToLeft = Lang.Rtl;
             ClientSize = new Size(Theme.S(500), Theme.S(430));
             Icon = Program.AppIcon;
 
@@ -49,11 +49,11 @@ namespace Tahakkum
             glyph.SetBounds(w - m - Theme.S(48), Theme.S(24), Theme.S(48), Theme.S(48));
             Controls.Add(glyph);
 
-            Label title = Theme.MakeLabel("يريد الطرف الآخر إرسال ملفات إليك", Theme.UiBold(14f), Theme.Text, ContentAlignment.MiddleRight);
+            Label title = Theme.MakeLabel(Lang.L("يريد الطرف الآخر إرسال ملفات إليك", "The other side wants to send you files"), Theme.UiBold(14f), Theme.Text, ContentAlignment.MiddleRight);
             title.SetBounds(m, Theme.S(22), w - 2 * m - Theme.S(60), Theme.S(30));
             Controls.Add(title);
 
-            Label sub = Theme.MakeLabel("من: " + peer, Theme.Ui(10f), Theme.Muted, ContentAlignment.MiddleRight);
+            Label sub = Theme.MakeLabel(Lang.L("من: ", "From: ") + peer, Theme.Ui(10f), Theme.Muted, ContentAlignment.MiddleRight);
             sub.AutoEllipsis = true;
             sub.SetBounds(m, Theme.S(52), w - 2 * m - Theme.S(60), Theme.S(24));
             Controls.Add(sub);
@@ -64,17 +64,17 @@ namespace Tahakkum
 
             // The marks stop the size from joining the extension in right-to-left text. The extension must read correctly.
             List<string> lines = offer.Names.Take(ShownNames).Select((n, i) => n + "‏   (‎" + FileTransferService.FormatSize(offer.Sizes[i]) + "‎)‏").ToList();
-            if (offer.Names.Length > ShownNames) lines.Add("و " + (offer.Names.Length - ShownNames) + " ملفات أخرى");
+            if (offer.Names.Length > ShownNames) lines.Add(Lang.L("و ", "and ") + (offer.Names.Length - ShownNames) + Lang.L(" ملفات أخرى", " more files"));
             Label names = Theme.MakeLabel(string.Join("\n", lines.ToArray()), Theme.Ui(10f), Theme.Text, ContentAlignment.TopRight);
             names.AutoEllipsis = true;
             names.SetBounds(Theme.S(14), Theme.S(10), info.Width - Theme.S(28), Theme.S(116));
             info.Controls.Add(names);
 
-            Label total = Theme.MakeLabel(offer.Names.Length + " ملف، الحجم الكلي " + FileTransferService.FormatSize(offer.Total), Theme.UiBold(10f), Theme.Muted, ContentAlignment.MiddleRight);
+            Label total = Theme.MakeLabel(offer.Names.Length + Lang.L(" ملف، الحجم الكلي ", " files, total size ") + FileTransferService.FormatSize(offer.Total), Theme.UiBold(10f), Theme.Muted, ContentAlignment.MiddleRight);
             total.SetBounds(Theme.S(14), Theme.S(128), info.Width - Theme.S(28), Theme.S(26));
             info.Controls.Add(total);
 
-            Label note = Theme.MakeLabel("ستُحفظ في " + service.SaveFolder + " ولن يُفتح أي منها تلقائياً. لا تفتح ملفاً لا تثق بمصدره.", Theme.Ui(9.5f), Theme.Muted, ContentAlignment.TopRight);
+            Label note = Theme.MakeLabel(Lang.L("ستُحفظ في ", "They'll be saved in ") + service.SaveFolder + Lang.L(" ولن يُفتح أي منها تلقائياً. لا تفتح ملفاً لا تثق بمصدره.", " and none will open automatically. Don't open a file you don't trust."), Theme.Ui(9.5f), Theme.Muted, ContentAlignment.TopRight);
             note.SetBounds(m, Theme.S(264), w - 2 * m, Theme.S(52));
             Controls.Add(note);
 
@@ -83,13 +83,13 @@ namespace Tahakkum
             Controls.Add(countdown);
 
             int bw = (w - 2 * m - Theme.S(12)) / 2;
-            accept = new PillButton { Text = "قبول", Kind = ButtonKind.Success, Glyph = Theme.GlyphCheck };
+            accept = new PillButton { Text = Lang.L("قبول", "Accept"), Kind = ButtonKind.Success, Glyph = Theme.GlyphCheck };
             accept.SetBounds(w - m - bw, Theme.S(356), bw, Theme.S(50));
             accept.Enabled = false;
             accept.Click += delegate { Answer(true); };
             Controls.Add(accept);
 
-            reject = new PillButton { Text = "رفض", Kind = ButtonKind.Secondary, Glyph = Theme.GlyphClose };
+            reject = new PillButton { Text = Lang.L("رفض", "Decline"), Kind = ButtonKind.Secondary, Glyph = Theme.GlyphClose };
             reject.SetBounds(m, Theme.S(356), bw, Theme.S(50));
             reject.Click += delegate { Answer(false); };
             Controls.Add(reject);
@@ -109,7 +109,7 @@ namespace Tahakkum
             double elapsed = (DateTime.UtcNow - started).TotalMilliseconds;
             if (elapsed >= ArmDelayMs && !accept.Enabled) accept.Enabled = true;
             int left = Math.Max(0, Proto.FileOfferSeconds - (int)(elapsed / 1000));
-            countdown.Text = "سيتم الرفض تلقائياً بعد " + left + " ثانية";
+            countdown.Text = Lang.L("سيتم الرفض تلقائياً بعد ", "It will be declined automatically in ") + left + Lang.L(" ثانية", " seconds");
             if (left <= 0) Answer(false);
         }
 
@@ -205,7 +205,7 @@ namespace Tahakkum
         {
             this.service = service;
             this.peer = peer;
-            Text = "نقل الملفات";
+            Text = Lang.L("نقل الملفات", "File transfer");
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -254,7 +254,7 @@ namespace Tahakkum
             }
             using (OpenFileDialog dialog = new OpenFileDialog())
             {
-                dialog.Title = "اختر الملفات المراد إرسالها إلى " + peer;
+                dialog.Title = Lang.L("اختر الملفات المراد إرسالها إلى ", "Choose the files to send to ") + peer;
                 dialog.Multiselect = true;
                 dialog.CheckFileExists = true;
                 dialog.DereferenceLinks = true;
@@ -266,11 +266,11 @@ namespace Tahakkum
         {
             string[] files = paths.Where(File.Exists).ToArray();
             string error = null;
-            if (files.Length < paths.Length) error = "إرسال المجلدات غير مدعوم. اضغط المجلد في ملف ZIP ثم أرسله.";
+            if (files.Length < paths.Length) error = Lang.L("إرسال المجلدات غير مدعوم. اضغط المجلد في ملف ZIP ثم أرسله.", "Sending folders isn't supported. Zip the folder, then send it.");
             string sendError = service.Send(files);
             if (sendError != null) error = sendError;
             if (error != null)
-                MessageBox.Show(this, error, "نقل الملفات", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1,
+                MessageBox.Show(this, error, Lang.L("نقل الملفات", "File transfer"), MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1,
                     MessageBoxOptions.RightAlign | MessageBoxOptions.RtlReading);
         }
 
@@ -299,7 +299,7 @@ namespace Tahakkum
             row.Card.Size = new Size(w, Theme.S(112));
 
             int p = Theme.S(14);
-            Label title = Theme.MakeLabel((t.Incoming ? "استلام: " : "إرسال: ") + t.Title, Theme.UiBold(10f), Theme.Text, ContentAlignment.MiddleRight);
+            Label title = Theme.MakeLabel((t.Incoming ? Lang.L("استلام: ", "Receiving: ") : Lang.L("إرسال: ", "Sending: ")) + t.Title, Theme.UiBold(10f), Theme.Text, ContentAlignment.MiddleRight);
             title.AutoEllipsis = true;
             title.SetBounds(p, Theme.S(8), w - 2 * p, Theme.S(26));
             row.Card.Controls.Add(title);
@@ -313,7 +313,7 @@ namespace Tahakkum
             row.Status.SetBounds(Theme.S(124), Theme.S(54), w - Theme.S(124) - p, Theme.S(46));
             row.Card.Controls.Add(row.Status);
 
-            row.Action = new PillButton { Text = "إلغاء", Kind = ButtonKind.Secondary, Glyph = Theme.GlyphClose, GlyphSize = 9f };
+            row.Action = new PillButton { Text = Lang.L("إلغاء", "Cancel"), Kind = ButtonKind.Secondary, Glyph = Theme.GlyphClose, GlyphSize = 9f };
             row.Action.Font = Theme.UiBold(9f);
             row.Action.TabStop = false;
             row.Action.SetBounds(p, Theme.S(60), Theme.S(104), Theme.S(34));
@@ -401,7 +401,7 @@ namespace Tahakkum
             row.Action.Visible = canOpen;
             if (canOpen)
             {
-                row.Action.Text = "فتح المجلد";
+                row.Action.Text = Lang.L("فتح المجلد", "Open folder");
                 row.Action.Glyph = Theme.GlyphFolder;
                 row.Action.Invalidate();
             }

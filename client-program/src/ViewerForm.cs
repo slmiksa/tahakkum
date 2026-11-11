@@ -149,7 +149,7 @@ namespace Tahakkum
             this.conn = conn;
             this.address = address;
             this.code = code;
-            Text = (string.IsNullOrEmpty(hostName) ? address : hostName + "  (" + address + ")") + "  —  رمز التحقق " + code + " — تحكّم";
+            Text = (string.IsNullOrEmpty(hostName) ? address : hostName + "  (" + address + ")") + Lang.L("  —  رمز التحقق ", "  —  Verification code ") + code + Lang.L(" — تحكّم", " — Tahakkum");
             BackColor = Theme.Bg;
             StartPosition = FormStartPosition.CenterScreen;
             Icon = Program.AppIcon;
@@ -171,49 +171,49 @@ namespace Tahakkum
             tools.BackColor = Theme.Card;
             tools.Padding = new Padding(Theme.S(6), Theme.S(8), Theme.S(6), 0);
 
-            PillButton end = AddTool("إنهاء", Theme.GlyphClose, Theme.S(86), ButtonKind.Danger);
+            PillButton end = AddTool(Lang.L("إنهاء", "End"), Theme.GlyphClose, Theme.S(86), ButtonKind.Danger);
             end.Click += delegate { CloseByUser(); };
 
             files = new FileTransferService(conn, address);
             transfers = new FileTransferWindow(files, string.IsNullOrEmpty(hostName) ? address : hostName + " (" + address + ")");
-            PillButton filesButton = AddTool("إرسال ملفات", Theme.GlyphFile, Theme.S(116), ButtonKind.Secondary);
+            PillButton filesButton = AddTool(Lang.L("إرسال ملفات", "Send files"), Theme.GlyphFile, Theme.S(116), ButtonKind.Secondary);
             filesButton.Click += delegate { transfers.PickAndSend(this); };
 
             // Shown only while others are watching too.
-            controlButton = AddTool("أخذ التحكم", Theme.GlyphConnect, Theme.S(124), ButtonKind.Primary);
+            controlButton = AddTool(Lang.L("أخذ التحكم", "Take control"), Theme.GlyphConnect, Theme.S(124), ButtonKind.Primary);
             controlButton.Visible = false;
             controlButton.Click += delegate { if (!hasControl) conn.Send(Msg.ControlRequest, null); };
 
             monitorMenu = NewMenu();
-            monitorButton = AddTool("الشاشة 1", Theme.GlyphMonitor, Theme.S(110), ButtonKind.Secondary);
+            monitorButton = AddTool(Lang.L("الشاشة 1", "Screen 1"), Theme.GlyphMonitor, Theme.S(110), ButtonKind.Secondary);
             monitorButton.Click += delegate { ShowMenu(monitorMenu, monitorButton); };
 
-            fitButton = AddTool("حجم فعلي", Theme.GlyphFit, Theme.S(112), ButtonKind.Secondary);
+            fitButton = AddTool(Lang.L("حجم فعلي", "Actual size"), Theme.GlyphFit, Theme.S(112), ButtonKind.Secondary);
             fitButton.Click += delegate { ToggleFit(); };
 
-            fullButton = AddTool("ملء الشاشة", Theme.GlyphFullscreen, Theme.S(120), ButtonKind.Secondary);
+            fullButton = AddTool(Lang.L("ملء الشاشة", "Full screen"), Theme.GlyphFullscreen, Theme.S(120), ButtonKind.Secondary);
             fullButton.Click += delegate { ToggleFullscreen(); };
 
             qualityMenu = NewMenu();
-            AddQuality("تلقائية (موصى بها)", 0, true);
-            AddQuality("عالية", 1, false);
-            AddQuality("متوازنة", 2, false);
-            AddQuality("سرعة أعلى", 3, false);
-            PillButton quality = AddTool("الجودة", Theme.GlyphQuality, Theme.S(92), ButtonKind.Secondary);
+            AddQuality(Lang.L("تلقائية (موصى بها)", "Automatic (recommended)"), 0, true);
+            AddQuality(Lang.L("عالية", "High"), 1, false);
+            AddQuality(Lang.L("متوازنة", "Balanced"), 2, false);
+            AddQuality(Lang.L("سرعة أعلى", "Faster"), 3, false);
+            PillButton quality = AddTool(Lang.L("الجودة", "Quality"), Theme.GlyphQuality, Theme.S(92), ButtonKind.Secondary);
             quality.Click += delegate { ShowMenu(qualityMenu, quality); };
 
             keysMenu = NewMenu();
-            AddShortcut("زر ويندوز", 0x5B);
+            AddShortcut(Lang.L("زر ويندوز", "Windows key"), 0x5B);
             AddShortcut("Alt + Tab", 0xA4, 0x09);
-            AddShortcut("Ctrl + Shift + Esc (مدير المهام)", 0xA2, 0xA0, 0x1B);
-            AddShortcut("Win + R (تشغيل)", 0x5B, 0x52);
-            AddShortcut("Win + D (سطح المكتب)", 0x5B, 0x44);
-            AddShortcut("Win + E (المستكشف)", 0x5B, 0x45);
-            AddShortcut("Win + L (قفل الشاشة)", 0x5B, 0x4C);
-            PillButton keys = AddTool("اختصارات", Theme.GlyphKeyboard, Theme.S(108), ButtonKind.Secondary);
+            AddShortcut(Lang.L("Ctrl + Shift + Esc (مدير المهام)", "Ctrl + Shift + Esc (Task Manager)"), 0xA2, 0xA0, 0x1B);
+            AddShortcut(Lang.L("Win + R (تشغيل)", "Win + R (Run)"), 0x5B, 0x52);
+            AddShortcut(Lang.L("Win + D (سطح المكتب)", "Win + D (Desktop)"), 0x5B, 0x44);
+            AddShortcut(Lang.L("Win + E (المستكشف)", "Win + E (Explorer)"), 0x5B, 0x45);
+            AddShortcut(Lang.L("Win + L (قفل الشاشة)", "Win + L (Lock screen)"), 0x5B, 0x4C);
+            PillButton keys = AddTool(Lang.L("اختصارات", "Shortcuts"), Theme.GlyphKeyboard, Theme.S(108), ButtonKind.Secondary);
             keys.Click += delegate { ShowMenu(keysMenu, keys); };
 
-            viewOnlyButton = AddTool("عرض فقط", Theme.GlyphView, Theme.S(108), ButtonKind.Secondary);
+            viewOnlyButton = AddTool(Lang.L("عرض فقط", "View only"), Theme.GlyphView, Theme.S(108), ButtonKind.Secondary);
             viewOnlyButton.Click += delegate { ToggleViewOnly(); };
 
             stats = Theme.MakeLabel("", Theme.Ui(9f), Theme.Muted, ContentAlignment.MiddleLeft);
@@ -232,7 +232,7 @@ namespace Tahakkum
             surfaceHost.RightToLeft = RightToLeft.No;
             surface.Dock = DockStyle.Fill;
             surface.Cursor = dotCursor;
-            surface.Overlay = "جاري استقبال الشاشة…";
+            surface.Overlay = Lang.L("جاري استقبال الشاشة…", "Receiving the screen…");
             surfaceHost.Controls.Add(surface);
 
             Controls.Add(surfaceHost);
@@ -388,7 +388,7 @@ namespace Tahakkum
                     int mw = r.ReadInt32();
                     int mh = r.ReadInt32();
                     bool primary = r.ReadBoolean();
-                    names.Add("الشاشة " + (i + 1) + "  —  " + mw + "×" + mh + (primary ? "  (الرئيسية)" : ""));
+                    names.Add(Lang.L("الشاشة ", "Screen ") + (i + 1) + "  —  " + mw + "×" + mh + (primary ? Lang.L("  (الرئيسية)", "  (Primary)") : ""));
                 }
                 lock (surface.Gate)
                 {
@@ -416,7 +416,7 @@ namespace Tahakkum
                 item.Click += delegate { conn.Send(Msg.SelectMonitor, Pack.Int(index)); };
                 monitorMenu.Items.Add(item);
             }
-            monitorButton.Text = "الشاشة " + (current + 1);
+            monitorButton.Text = Lang.L("الشاشة ", "Screen ") + (current + 1);
             monitorButton.Enabled = names.Count > 1;
         }
 
@@ -466,7 +466,7 @@ namespace Tahakkum
                 Rectangle r;
                 lock (dirtyGate) { r = dirty; dirty = Rectangle.Empty; }
                 Interlocked.Exchange(ref invalidatePending, 0);
-                if (surface.Overlay == "جاري استقبال الشاشة…") { surface.Overlay = null; surface.Invalidate(); }
+                if (surface.Overlay == Lang.L("جاري استقبال الشاشة…", "Receiving the screen…")) { surface.Overlay = null; surface.Invalidate(); }
                 else surface.Invalidate(surface.ToLocal(r));
             });
         }
@@ -493,12 +493,12 @@ namespace Tahakkum
                 if (!mine) ReleaseHeldKeys();
                 controlButton.Visible = count > 1;
                 controlButton.Enabled = !mine;
-                controlButton.Text = mine ? "التحكم معك" : "أخذ التحكم";
+                controlButton.Text = mine ? Lang.L("التحكم معك", "You have control") : Lang.L("أخذ التحكم", "Take control");
                 controlButton.Kind = mine ? ButtonKind.Secondary : ButtonKind.Primary;
                 controlButton.Invalidate();
                 tools.PerformLayout();
-                if (lost) ShowNotice("انتقل التحكم إلى " + controller);
-                else if (gained) ShowNotice("التحكم معك الآن");
+                if (lost) ShowNotice(Lang.L("انتقل التحكم إلى ", "Control passed to ") + controller);
+                else if (gained) ShowNotice(Lang.L("التحكم معك الآن", "You have control now"));
                 ShowStats("");
             });
         }
@@ -529,7 +529,7 @@ namespace Tahakkum
                 switch (status)
                 {
                     case HostStatus.Locked:
-                        surface.Overlay = "الجهاز الآخر مقفل أو تظهر عليه نافذة أمان من ويندوز.\nسيعود العرض تلقائياً عند فتحه.";
+                        surface.Overlay = Lang.L("الجهاز الآخر مقفل أو تظهر عليه نافذة أمان من ويندوز.\nسيعود العرض تلقائياً عند فتحه.", "The other device is locked or showing a Windows security screen.\nThe view returns automatically when it's unlocked.");
                         break;
                     case HostStatus.Normal:
                         surface.Overlay = null;
@@ -554,10 +554,10 @@ namespace Tahakkum
                 if (closingByUs) return;
                 RemoveHook();
                 if (fullscreen) ToggleFullscreen();
-                surface.Overlay = "انتهت الجلسة أو انقطع الاتصال بالجهاز.";
+                surface.Overlay = Lang.L("انتهت الجلسة أو انقطع الاتصال بالجهاز.", "The session ended or the connection was lost.");
                 surface.Invalidate();
                 tick.Stop();
-                stats.Text = "غير متصل";
+                stats.Text = Lang.L("غير متصل", "Disconnected");
             });
         }
 
@@ -747,7 +747,7 @@ namespace Tahakkum
         void ToggleFit()
         {
             surface.FitToWindow = !surface.FitToWindow;
-            fitButton.Text = surface.FitToWindow ? "حجم فعلي" : "ملاءمة النافذة";
+            fitButton.Text = surface.FitToWindow ? Lang.L("حجم فعلي", "Actual size") : Lang.L("ملاءمة النافذة", "Fit window");
             ApplySurfaceSize();
         }
 
@@ -780,7 +780,7 @@ namespace Tahakkum
                 FormBorderStyle = FormBorderStyle.None;
                 Bounds = Screen.FromControl(this).Bounds;
                 toolbar.Visible = false;
-                fullButton.Text = "نافذة";
+                fullButton.Text = Lang.L("نافذة", "Windowed");
                 fullButton.Glyph = Theme.GlyphWindowed;
             }
             else
@@ -789,7 +789,7 @@ namespace Tahakkum
                 Bounds = restoreBounds;
                 WindowState = restoreState;
                 toolbar.Visible = true;
-                fullButton.Text = "ملء الشاشة";
+                fullButton.Text = Lang.L("ملء الشاشة", "Full screen");
                 fullButton.Glyph = Theme.GlyphFullscreen;
             }
             ResumeLayout();
@@ -824,9 +824,9 @@ namespace Tahakkum
         void ShowStats(string numbers)
         {
             string text = numbers;
-            if (remotePaused) text = "أوقف الطرف الآخر التحكم مؤقتاً";
-            else if (viewerCount > 1) text = (hasControl ? "التحكم معك" : "يتحكم: " + controllerName) + "  •  المتصلون: " + viewerCount;
-            stats.RightToLeft = text == numbers ? RightToLeft.No : RightToLeft.Yes;
+            if (remotePaused) text = Lang.L("أوقف الطرف الآخر التحكم مؤقتاً", "The other side paused control");
+            else if (viewerCount > 1) text = (hasControl ? Lang.L("التحكم معك", "You have control") : Lang.L("يتحكم: ", "Controlling: ") + controllerName) + Lang.L("  •  المتصلون: ", "  •  Connected: ") + viewerCount;
+            stats.RightToLeft = text == numbers ? RightToLeft.No : Lang.Rtl;
             stats.TextAlign = text == numbers ? ContentAlignment.MiddleLeft : ContentAlignment.MiddleRight;
             stats.Text = text;
         }

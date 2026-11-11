@@ -75,7 +75,7 @@ namespace Tahakkum
             this.startInTray = startInTray;
             this.autoConnect = autoConnect;
 
-            Text = "تحكّم — التحكم بالشاشات عبر الشبكة";
+            Text = Lang.L("تحكّم — التحكم بالشاشات عبر الشبكة", "Tahakkum — Remote Screen Control");
             Icon = Program.AppIcon;
             BackColor = Theme.Bg;
             FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -95,11 +95,18 @@ namespace Tahakkum
             wordmark.SetBounds(W - margin - Theme.S(186), Theme.S(12), Theme.S(120), Theme.S(40));
             Controls.Add(wordmark);
             // MiddleLeft is the leading edge in a right-to-left label, so this sits next to the logo.
-            Label subtitle = Theme.MakeLabel("تحكم كامل بالشاشات داخل الشبكة أو عبر الإنترنت، بموافقة الشخص أو بكلمة سر", Theme.Ui(10f), Theme.Muted, ContentAlignment.MiddleLeft);
+            Label subtitle = Theme.MakeLabel(Lang.L("تحكم كامل بالشاشات داخل الشبكة أو عبر الإنترنت، بموافقة الشخص أو بكلمة سر", "Full screen control inside the network or over the internet, with the person's consent or a password"), Theme.Ui(10f), Theme.Muted, ContentAlignment.MiddleLeft);
             subtitle.SetBounds(W - margin - Theme.S(626), Theme.S(52), Theme.S(560), Theme.S(24));
             Controls.Add(subtitle);
 
-            licenseButton = new PillButton { Text = "تفعيل البرنامج", Kind = ButtonKind.Primary, Glyph = Theme.GlyphShield, GlyphSize = 10f };
+            // Language toggle: shows the other language and restarts into it.
+            PillButton langButton = new PillButton { Text = Lang.English ? "العربية" : "English", Kind = ButtonKind.Secondary };
+            langButton.Font = Theme.UiBold(9.5f);
+            langButton.SetBounds(Theme.S(430), Theme.S(16), Theme.S(110), Theme.S(34));
+            langButton.Click += delegate { Program.SwitchLanguage(!Lang.English); };
+            Controls.Add(langButton);
+
+            licenseButton = new PillButton { Text = Lang.L("تفعيل البرنامج", "Activate"), Kind = ButtonKind.Primary, Glyph = Theme.GlyphShield, GlyphSize = 10f };
             licenseButton.Font = Theme.UiBold(9f);
             licenseButton.SetBounds(margin, Theme.S(24), Theme.S(130), Theme.S(36));
             licenseButton.Click += delegate { OpenActivation(); };
@@ -122,11 +129,11 @@ namespace Tahakkum
             int p = Theme.S(24);
             int inner = cw - 2 * p;
 
-            connectCard.Controls.Add(At(Theme.MakeLabel("التحكم بشاشة أخرى", Theme.UiBold(13.5f), Theme.Text, ContentAlignment.MiddleRight), p, Theme.S(18), inner, Theme.S(30)));
-            connectCard.Controls.Add(At(Theme.MakeLabel("أدخل عنوان IP داخل الشبكة، أو معرّف الجهاز عبر الإنترنت.", Theme.Ui(10f), Theme.Muted, ContentAlignment.MiddleRight), p, Theme.S(48), inner, Theme.S(24)));
+            connectCard.Controls.Add(At(Theme.MakeLabel(Lang.L("التحكم بشاشة أخرى", "Control another screen"), Theme.UiBold(13.5f), Theme.Text, ContentAlignment.MiddleRight), p, Theme.S(18), inner, Theme.S(30)));
+            connectCard.Controls.Add(At(Theme.MakeLabel(Lang.L("أدخل عنوان IP داخل الشبكة، أو معرّف الجهاز عبر الإنترنت.", "Enter an IP address on the network, or the device ID over the internet."), Theme.Ui(10f), Theme.Muted, ContentAlignment.MiddleRight), p, Theme.S(48), inner, Theme.S(24)));
 
             addressBox.SetBounds(p, Theme.S(86), inner, Theme.S(56));
-            addressBox.Box.AccessibleName = "عنوان IP أو المعرّف";
+            addressBox.Box.AccessibleName = Lang.L("عنوان IP أو المعرّف", "IP address or ID");
             addressBox.Box.KeyDown += (s, e) =>
             {
                 if (e.KeyCode == Keys.Enter)
@@ -137,7 +144,7 @@ namespace Tahakkum
             };
             connectCard.Controls.Add(addressBox);
 
-            connectButton = new PillButton { Text = "اتصال", Kind = ButtonKind.Primary, Glyph = Theme.GlyphConnect, GlyphSize = 12f };
+            connectButton = new PillButton { Text = Lang.L("اتصال", "Connect"), Kind = ButtonKind.Primary, Glyph = Theme.GlyphConnect, GlyphSize = 12f };
             connectButton.Font = Theme.UiBold(11.5f);
             connectButton.SetBounds(p, Theme.S(154), inner, Theme.S(50));
             connectButton.Click += delegate { ConnectOrCancel(); };
@@ -147,16 +154,16 @@ namespace Tahakkum
             connectCard.Controls.Add(At(connectStatus, p, Theme.S(210), inner, Theme.S(50)));
 
             // Address book: the saved list, the recent connections, and the machines on this network.
-            savedTab = MakeListTab("المحفوظة", ListSaved);
+            savedTab = MakeListTab(Lang.L("المحفوظة", "Saved"), ListSaved);
             savedTab.SetBounds(cw - p - Theme.S(96), Theme.S(264), Theme.S(96), Theme.S(32));
             connectCard.Controls.Add(savedTab);
-            recentTab = MakeListTab("الأخيرة", ListRecent);
+            recentTab = MakeListTab(Lang.L("الأخيرة", "Recent"), ListRecent);
             recentTab.SetBounds(cw - p - Theme.S(182), Theme.S(264), Theme.S(80), Theme.S(32));
             connectCard.Controls.Add(recentTab);
-            networkTab = MakeListTab("في الشبكة", ListNetwork);
+            networkTab = MakeListTab(Lang.L("في الشبكة", "On network"), ListNetwork);
             networkTab.SetBounds(cw - p - Theme.S(292), Theme.S(264), Theme.S(104), Theme.S(32));
             connectCard.Controls.Add(networkTab);
-            PillButton addContact = new PillButton { Text = "إضافة", Kind = ButtonKind.Secondary, Glyph = Theme.GlyphAdd, GlyphSize = 9f };
+            PillButton addContact = new PillButton { Text = Lang.L("إضافة", "Add"), Kind = ButtonKind.Secondary, Glyph = Theme.GlyphAdd, GlyphSize = 9f };
             addContact.Font = Theme.UiBold(9f);
             addContact.SetBounds(p, Theme.S(264), Theme.S(84), Theme.S(32));
             addContact.Click += delegate { EditContact(null, addressBox.Box.Text.Trim()); };
@@ -167,7 +174,7 @@ namespace Tahakkum
             recentPanel.AutoScroll = true;
             connectCard.Controls.Add(recentPanel);
 
-            PillButton androidButton = new PillButton { Text = "التحكم بشاشة أندرويد (TV) عبر IP", Kind = ButtonKind.Secondary, Glyph = Theme.GlyphConnect, GlyphSize = 10f };
+            PillButton androidButton = new PillButton { Text = Lang.L("التحكم بشاشة أندرويد (TV) عبر IP", "Control an Android screen (TV) over IP"), Kind = ButtonKind.Secondary, Glyph = Theme.GlyphConnect, GlyphSize = 10f };
             androidButton.Font = Theme.UiBold(9.5f);
             androidButton.SetBounds(p, connectCard.Height - Theme.S(42), inner, Theme.S(34));
             androidButton.Click += delegate { OpenAndroid(); };
@@ -178,7 +185,7 @@ namespace Tahakkum
             hostCard.SetBounds(margin, cardTop, cardW, cardH);
             Controls.Add(hostCard);
 
-            hostCard.Controls.Add(At(Theme.MakeLabel("هذا الجهاز", Theme.UiBold(13.5f), Theme.Text, ContentAlignment.MiddleRight), p, Theme.S(18), inner, Theme.S(30)));
+            hostCard.Controls.Add(At(Theme.MakeLabel(Lang.L("هذا الجهاز", "This device"), Theme.UiBold(13.5f), Theme.Text, ContentAlignment.MiddleRight), p, Theme.S(18), inner, Theme.S(30)));
 
             hostDot = new StatusDot { BackColor = Theme.Card };
             hostDot.SetBounds(cw - p - Theme.S(14), Theme.S(57), Theme.S(12), Theme.S(12));
@@ -189,12 +196,12 @@ namespace Tahakkum
             CardPanel ipTile = new CardPanel { BackColor = Theme.CardRaised };
             ipTile.SetBounds(p, Theme.S(86), inner, Theme.S(118));
             hostCard.Controls.Add(ipTile);
-            tileTitle = Theme.MakeLabel("عنوان هذا الجهاز", Theme.Ui(9.5f), Theme.Muted, ContentAlignment.MiddleRight);
+            tileTitle = Theme.MakeLabel(Lang.L("عنوان هذا الجهاز", "This device's address"), Theme.Ui(9.5f), Theme.Muted, ContentAlignment.MiddleRight);
             ipTile.Controls.Add(At(tileTitle, Theme.S(14), Theme.S(8), inner - Theme.S(28), Theme.S(22)));
             mainIp = Theme.MakeLabel("", Theme.UiBold(20f), Theme.Text, ContentAlignment.MiddleCenter);
             mainIp.RightToLeft = RightToLeft.No;
             ipTile.Controls.Add(At(mainIp, Theme.S(48), Theme.S(30), inner - Theme.S(96), Theme.S(44)));
-            copyIp = new PillButton { Kind = ButtonKind.Ghost, Glyph = Theme.GlyphCopy, GlyphSize = 12f, AccessibleName = "نسخ العنوان" };
+            copyIp = new PillButton { Kind = ButtonKind.Ghost, Glyph = Theme.GlyphCopy, GlyphSize = 12f, AccessibleName = Lang.L("نسخ العنوان", "Copy address") };
             copyIp.SetBounds(Theme.S(10), Theme.S(34), Theme.S(36), Theme.S(36));
             copyIp.Click += delegate { CopyAddress(); };
             ipTile.Controls.Add(copyIp);
@@ -203,23 +210,23 @@ namespace Tahakkum
             otherIps.AutoEllipsis = true;
             ipTile.Controls.Add(At(otherIps, Theme.S(10), Theme.S(78), inner - Theme.S(20), Theme.S(30)));
 
-            hostToggle = new ToggleSwitch { Text = "استقبال طلبات التحكم" };
+            hostToggle = new ToggleSwitch { Text = Lang.L("استقبال طلبات التحكم", "Accept control requests") };
             hostCard.Controls.Add(At(hostToggle, p, Theme.S(216), inner, Theme.S(40)));
 
-            internetToggle = new ToggleSwitch { Text = "الاستقبال عبر الإنترنت بمعرّف" };
+            internetToggle = new ToggleSwitch { Text = Lang.L("الاستقبال عبر الإنترنت بمعرّف", "Accept over the internet by ID") };
             hostCard.Controls.Add(At(internetToggle, p, Theme.S(252), inner, Theme.S(36)));
 
-            autostart = new ToggleSwitch { Text = "التشغيل مع بدء ويندوز" };
+            autostart = new ToggleSwitch { Text = Lang.L("التشغيل مع بدء ويندوز", "Start with Windows") };
             autostart.Checked = IsAutostartEnabled();
             autostart.CheckedChanged += delegate { SetAutostart(autostart.Checked); };
             hostCard.Controls.Add(At(autostart, p, Theme.S(288), inner, Theme.S(36)));
 
-            keepAwakeToggle = new ToggleSwitch { Text = "منع السكون أثناء الاستقبال" };
+            keepAwakeToggle = new ToggleSwitch { Text = Lang.L("منع السكون أثناء الاستقبال", "Prevent sleep while hosting") };
             hostCard.Controls.Add(At(keepAwakeToggle, p, Theme.S(322), inner, Theme.S(36)));
 
-            firewallState = Theme.MakeLabel("الجدار الناري: جاري الفحص…", Theme.Ui(10f), Theme.Text, ContentAlignment.MiddleRight);
+            firewallState = Theme.MakeLabel(Lang.L("الجدار الناري: جاري الفحص…", "Firewall: checking…"), Theme.Ui(10f), Theme.Text, ContentAlignment.MiddleRight);
             hostCard.Controls.Add(At(firewallState, p + Theme.S(130), Theme.S(358), inner - Theme.S(130), Theme.S(40)));
-            firewallButton = new PillButton { Text = "السماح", Glyph = Theme.GlyphShield, GlyphSize = 10f };
+            firewallButton = new PillButton { Text = Lang.L("السماح", "Allow"), Glyph = Theme.GlyphShield, GlyphSize = 10f };
             firewallButton.Font = Theme.UiBold(9f);
             firewallButton.SetBounds(p, Theme.S(362), Theme.S(120), Theme.S(34));
             firewallButton.Visible = false;
@@ -234,13 +241,13 @@ namespace Tahakkum
 
             int bottomY = Theme.S(448);
             int half = (inner - Theme.S(10)) / 2;
-            PillButton logButton = new PillButton { Text = "سجل الجلسات", Glyph = Theme.GlyphHistory, GlyphSize = 10f };
+            PillButton logButton = new PillButton { Text = Lang.L("سجل الجلسات", "Session log"), Glyph = Theme.GlyphHistory, GlyphSize = 10f };
             logButton.Font = Theme.UiBold(9f);
             logButton.SetBounds(p + half + Theme.S(10), bottomY, half, Theme.S(38));
             logButton.Click += delegate { OpenLog(); };
             hostCard.Controls.Add(logButton);
 
-            PillButton adminButton = new PillButton { Text = "تشغيل كمسؤول", Glyph = Theme.GlyphAdmin, GlyphSize = 10f };
+            PillButton adminButton = new PillButton { Text = Lang.L("تشغيل كمسؤول", "Run as administrator"), Glyph = Theme.GlyphAdmin, GlyphSize = 10f };
             adminButton.Font = Theme.UiBold(9f);
             adminButton.SetBounds(p, bottomY, half, Theme.S(38));
             adminButton.Visible = !IsElevated();
@@ -378,17 +385,17 @@ namespace Tahakkum
             string id = relay != null ? relay.Id : null;
             if (id != null)
             {
-                tileTitle.Text = "معرّف هذا الجهاز للاتصال عبر الإنترنت";
+                tileTitle.Text = Lang.L("معرّف هذا الجهاز للاتصال عبر الإنترنت", "This device's ID for internet connections");
                 mainIp.Text = id.Substring(0, 3) + " " + id.Substring(3, 3) + " " + id.Substring(6);
                 copyIp.Enabled = true;
-                otherIps.Text = all.Count > 0 ? "داخل الشبكة: " + all[0] : "";
+                otherIps.Text = all.Count > 0 ? Lang.L("داخل الشبكة: ", "On the network: ") + all[0] : "";
                 return;
             }
-            tileTitle.Text = "عنوان هذا الجهاز";
-            mainIp.Text = all.Count > 0 ? all[0] : "غير متصل بالشبكة";
+            tileTitle.Text = Lang.L("عنوان هذا الجهاز", "This device's address");
+            mainIp.Text = all.Count > 0 ? all[0] : Lang.L("غير متصل بالشبكة", "Not connected to a network");
             copyIp.Enabled = all.Count > 0;
-            if (internetToggle.Checked && hostToggle.Checked && LicenseManager.IsValid) otherIps.Text = "جاري الاتصال بخادم الاتصال…";
-            else otherIps.Text = all.Count > 1 ? string.Join("   ", all.Skip(1).ToArray()) : "المنفذ " + Proto.DefaultPort;
+            if (internetToggle.Checked && hostToggle.Checked && LicenseManager.IsValid) otherIps.Text = Lang.L("جاري الاتصال بخادم الاتصال…", "Connecting to the relay server…");
+            else otherIps.Text = all.Count > 1 ? string.Join("   ", all.Skip(1).ToArray()) : Lang.L("المنفذ ", "Port ") + Proto.DefaultPort;
         }
 
         static string InternetFlagPath { get { return System.IO.Path.Combine(AppFiles.Dir, "internet.on"); } }
@@ -456,12 +463,12 @@ namespace Tahakkum
             licenseButton.Visible = !valid || LicenseManager.ExpiresSoon;
             if (valid)
             {
-                licenseState.Text = "مرخّص لـ " + Identity.Sanitize(t.Company, 64) + "\nمتبقٍ " + LicenseManager.DaysLeft + " يوماً";
+                licenseState.Text = Lang.L("مرخّص لـ ", "Licensed to ") + Identity.Sanitize(t.Company, 64) + Lang.L("\nمتبقٍ ", "\nRemaining ") + LicenseManager.DaysLeft + Lang.L(" يوماً", " days");
                 licenseState.ForeColor = LicenseManager.ExpiresSoon ? Theme.Warning : Theme.Muted;
             }
             else
             {
-                licenseState.Text = t != null && LicenseManager.DaysLeft <= 0 ? "انتهت رخصة البرنامج" : "البرنامج غير مفعّل";
+                licenseState.Text = t != null && LicenseManager.DaysLeft <= 0 ? Lang.L("انتهت رخصة البرنامج", "The license has expired") : Lang.L("البرنامج غير مفعّل", "The program is not activated");
                 licenseState.ForeColor = Theme.Danger;
             }
             if (valid != licenseWasValid)
@@ -481,7 +488,7 @@ namespace Tahakkum
 
         void RefreshPasswordButton()
         {
-            passwordButton.Text = AccessPassword.IsSet ? "كلمة سر الوصول: مفعّلة" : "تعيين كلمة سر للوصول المباشر";
+            passwordButton.Text = AccessPassword.IsSet ? Lang.L("كلمة سر الوصول: مفعّلة", "Access password: on") : Lang.L("تعيين كلمة سر للوصول المباشر", "Set a password for direct access");
             passwordButton.Invalidate();
         }
 
@@ -491,7 +498,7 @@ namespace Tahakkum
         {
             if (hostSessions.Count > 0)
             {
-                MessageBox.Show(this, "لا يمكن تغيير كلمة السر أثناء جلسة تحكم. أنهِ الجلسة أولاً.", "كلمة سر الوصول", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1,
+                MessageBox.Show(this, Lang.L("لا يمكن تغيير كلمة السر أثناء جلسة تحكم. أنهِ الجلسة أولاً.", "You can't change the password during a session. End the session first."), Lang.L("كلمة سر الوصول", "Access password"), MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1,
                     MessageBoxOptions.RightAlign | MessageBoxOptions.RtlReading);
                 return;
             }
@@ -505,7 +512,7 @@ namespace Tahakkum
             if (!LicenseManager.IsValid && !OpenActivation()) return;
             if (!LicenseManager.AndroidControlAllowed)
             {
-                MessageBox.Show(this, "ميزة التحكم بشاشات أندرويد غير مفعّلة لهذا الجهاز. تُفعَّل من لوحة التحكم.", "شاشة أندرويد",
+                MessageBox.Show(this, Lang.L("ميزة التحكم بشاشات أندرويد غير مفعّلة لهذا الجهاز. تُفعَّل من لوحة التحكم.", "Android screen control isn't enabled for this device. It's enabled from the dashboard."), Lang.L("شاشة أندرويد", "Android screen"),
                     MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MessageBoxOptions.RightAlign | MessageBoxOptions.RtlReading);
                 return;
             }
@@ -534,7 +541,7 @@ namespace Tahakkum
             string input = addressBox.Box.Text.Trim();
             if (input.Length == 0)
             {
-                SetStatus("اكتب عنوان IP أو معرّف الجهاز أولاً.", Theme.Warning);
+                SetStatus(Lang.L("اكتب عنوان IP أو معرّف الجهاز أولاً.", "Enter an IP address or device ID first."), Theme.Warning);
                 addressBox.Box.Focus();
                 return;
             }
@@ -545,18 +552,18 @@ namespace Tahakkum
 
             ViewerClient client = new ViewerClient();
             pending = client;
-            connectButton.Text = "إلغاء";
+            connectButton.Text = Lang.L("إلغاء", "Cancel");
             connectButton.Kind = ButtonKind.Secondary;
             connectButton.Glyph = Theme.GlyphClose;
             connectButton.Invalidate();
             addressBox.Box.Enabled = false;
-            SetStatus("جاري الاتصال بـ " + host + " …", Theme.Muted);
+            SetStatus(Lang.L("جاري الاتصال بـ ", "Connecting to ") + host + " …", Theme.Muted);
 
             Thread t = new Thread(() =>
             {
                 try
                 {
-                    Action<string> waiting = code => OnUi(() => SetStatus("بانتظار موافقة الشخص أمام الشاشة…\nرمز التحقق: " + code, Theme.Accent));
+                    Action<string> waiting = code => OnUi(() => SetStatus(Lang.L("بانتظار موافقة الشخص أمام الشاشة…\nرمز التحقق: ", "Waiting for the person at the screen to approve…\nVerification code: ") + code, Theme.Accent));
                     Func<string, bool> confirm = code => ConfirmChangedIdentity(deviceId ?? host, code);
                     PasswordPrompt prompt = (code, failed) => AskPassword(deviceId ?? host, code, failed);
                     Connection conn = deviceId != null
@@ -570,7 +577,7 @@ namespace Tahakkum
                 }
                 catch (Exception)
                 {
-                    OnUi(() => ConnectFinished(client, null, input, "حدث خطأ غير متوقع أثناء الاتصال."));
+                    OnUi(() => ConnectFinished(client, null, input, Lang.L("حدث خطأ غير متوقع أثناء الاتصال.", "An unexpected error occurred while connecting.")));
                 }
             });
             t.IsBackground = true;
@@ -584,8 +591,8 @@ namespace Tahakkum
             Invoke((Action)delegate
             {
                 DialogResult r = MessageBox.Show(this,
-                    "هوية الجهاز " + host + " تغيرت عن آخر اتصال.\n\nقد يكون البرنامج أُعيد تثبيته، أو أن جهازاً آخر ينتحل هذا العنوان.\nرمز التحقق الجديد: " + code + "\n\nهل تريد المتابعة؟ تأكد من مطابقة الرمز مع الشخص أمام الشاشة.",
-                    "تحذير أمني", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2,
+                    Lang.L("هوية الجهاز ", "The device identity ") + host + Lang.L(" تغيرت عن آخر اتصال.\n\nقد يكون البرنامج أُعيد تثبيته، أو أن جهازاً آخر ينتحل هذا العنوان.\nرمز التحقق الجديد: ", " has changed since the last connection.\n\nThe program may have been reinstalled, or another device may be impersonating this address.\nNew verification code: ") + code + Lang.L("\n\nهل تريد المتابعة؟ تأكد من مطابقة الرمز مع الشخص أمام الشاشة.", "\n\nDo you want to continue? Make sure the code matches with the person at the screen."),
+                    Lang.L("تحذير أمني", "Security warning"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2,
                     MessageBoxOptions.RightAlign | MessageBoxOptions.RtlReading);
                 accepted = r == DialogResult.Yes;
             });
@@ -609,7 +616,7 @@ namespace Tahakkum
         void ConnectFinished(ViewerClient client, Connection conn, string input, string error)
         {
             if (pending == client) pending = null;
-            connectButton.Text = "اتصال";
+            connectButton.Text = Lang.L("اتصال", "Connect");
             connectButton.Kind = ButtonKind.Primary;
             connectButton.Glyph = Theme.GlyphConnect;
             connectButton.Invalidate();
@@ -621,10 +628,15 @@ namespace Tahakkum
                 return;
             }
 
-            SetStatus("تمت الموافقة. الجلسة مفتوحة.", Theme.Success);
+            SetStatus(Lang.L("تمت الموافقة. الجلسة مفتوحة.", "Approved. The session is open."), Theme.Success);
+            // Record outgoing sessions too, so the log shows both who connected to this machine and
+            // the machines this person connected to.
+            string peer = client.HostName != null && client.HostName.Length > 0 ? client.HostName + " (" + input + ")" : input;
+            AppFiles.Log("بدأت جلسة تحكم إلى " + peer);
             RecentHosts.Touch(input);
             RefreshRecent();
             ViewerForm viewer = new ViewerForm(conn, input, client.HostName, client.Code);
+            viewer.FormClosed += delegate { AppFiles.Log("انتهت جلسة التحكم إلى " + peer); };
             viewer.Show();
             viewer.Activate();
         }
@@ -692,7 +704,7 @@ namespace Tahakkum
             List<Contact> list = ContactBook.Load();
             if (list.Count == 0)
             {
-                ShowListHint("احفظ هنا عناوين الأجهزة التي تتصل بها كثيراً، باسم صاحبها أو الجهاز. اضغط \"إضافة\" للبدء.");
+                ShowListHint(Lang.L("احفظ هنا عناوين الأجهزة التي تتصل بها كثيراً، باسم صاحبها أو الجهاز. اضغط \"إضافة\" للبدء.", "Save here the addresses you connect to often, by their owner or device. Press \"Add\" to start."));
                 return;
             }
             int width = ListWidth(list.Count);
@@ -712,7 +724,7 @@ namespace Tahakkum
                 edit.Click += delegate { EditContact(contact, contact.Address); };
                 recentPanel.Controls.Add(edit);
 
-                PillButton remove = new PillButton { Kind = ButtonKind.Ghost, Glyph = Theme.GlyphDelete, GlyphSize = 9f, AccessibleName = "حذف " + contact.Name };
+                PillButton remove = new PillButton { Kind = ButtonKind.Ghost, Glyph = Theme.GlyphDelete, GlyphSize = 9f, AccessibleName = Lang.L("حذف ", "Delete ") + contact.Name };
                 remove.SetBounds(width - Theme.S(36), y, Theme.S(36), Theme.S(36));
                 remove.Click += delegate { RemoveContact(contact); };
                 recentPanel.Controls.Add(remove);
@@ -725,7 +737,7 @@ namespace Tahakkum
             List<string> list = RecentHosts.Load();
             if (list.Count == 0)
             {
-                ShowListHint("ستظهر هنا آخر العناوين التي اتصلت بها.");
+                ShowListHint(Lang.L("ستظهر هنا آخر العناوين التي اتصلت بها.", "The addresses you've recently connected to will appear here."));
                 return;
             }
             int width = ListWidth(list.Count);
@@ -739,12 +751,12 @@ namespace Tahakkum
                 row.Click += delegate { ConnectTo(host); };
                 recentPanel.Controls.Add(row);
 
-                PillButton save = new PillButton { Kind = ButtonKind.Ghost, Glyph = Theme.GlyphAdd, GlyphSize = 9f, AccessibleName = "حفظ " + host };
+                PillButton save = new PillButton { Kind = ButtonKind.Ghost, Glyph = Theme.GlyphAdd, GlyphSize = 9f, AccessibleName = Lang.L("حفظ ", "Save ") + host };
                 save.SetBounds(width - Theme.S(72), y, Theme.S(36), Theme.S(36));
                 save.Click += delegate { EditContact(null, host); };
                 recentPanel.Controls.Add(save);
 
-                PillButton remove = new PillButton { Kind = ButtonKind.Ghost, Glyph = Theme.GlyphClose, GlyphSize = 8f, AccessibleName = "حذف " + host };
+                PillButton remove = new PillButton { Kind = ButtonKind.Ghost, Glyph = Theme.GlyphClose, GlyphSize = 8f, AccessibleName = Lang.L("حذف ", "Delete ") + host };
                 remove.SetBounds(width - Theme.S(36), y, Theme.S(36), Theme.S(36));
                 remove.Click += delegate
                 {
@@ -759,7 +771,7 @@ namespace Tahakkum
         void FillNetworkList()
         {
             int mine = ++scanGeneration;
-            ShowListHint("جاري البحث عن الأجهزة في هذه الشبكة…");
+            ShowListHint(Lang.L("جاري البحث عن الأجهزة في هذه الشبكة…", "Searching for devices on this network…"));
             Thread t = new Thread(() =>
             {
                 List<FoundDevice> found;
@@ -784,7 +796,7 @@ namespace Tahakkum
             recentPanel.Controls.Clear();
             if (found.Count == 0)
             {
-                ShowListHint("لم يُعثر على أجهزة. يظهر الجهاز هنا إذا كان البرنامج يعمل عليه مع تفعيل استقبال الطلبات، وسُمح له في الجدار الناري. اضغط \"في الشبكة\" للبحث مرة أخرى.");
+                ShowListHint(Lang.L("لم يُعثر على أجهزة. يظهر الجهاز هنا إذا كان البرنامج يعمل عليه مع تفعيل استقبال الطلبات، وسُمح له في الجدار الناري. اضغط \"في الشبكة\" للبحث مرة أخرى.", "No devices found. A device appears here if it's running the program with request-accepting on and allowed through the firewall. Press \"On network\" to search again."));
                 recentPanel.ResumeLayout();
                 return;
             }
@@ -800,7 +812,7 @@ namespace Tahakkum
                 row.Click += delegate { ConnectTo(d.Port == Proto.DefaultPort ? d.Address : d.Address + ":" + d.Port); };
                 recentPanel.Controls.Add(row);
 
-                PillButton save = new PillButton { Kind = ButtonKind.Ghost, Glyph = Theme.GlyphAdd, GlyphSize = 9f, AccessibleName = "حفظ " + d.Title };
+                PillButton save = new PillButton { Kind = ButtonKind.Ghost, Glyph = Theme.GlyphAdd, GlyphSize = 9f, AccessibleName = Lang.L("حفظ ", "Save ") + d.Title };
                 save.SetBounds(width - Theme.S(36), y, Theme.S(36), Theme.S(36));
                 save.Click += delegate { EditContact(new Contact { Name = d.Title, Address = "" }, d.Address); };
                 recentPanel.Controls.Add(save);
@@ -827,7 +839,7 @@ namespace Tahakkum
         void RefreshNameButton()
         {
             string name = Profile.DisplayName;
-            nameButton.Text = name.Length > 0 ? "اسمك الظاهر للدعم الفني: " + name : "عيّن اسمك الظاهر للدعم الفني";
+            nameButton.Text = name.Length > 0 ? Lang.L("اسمك الظاهر للدعم الفني: ", "Your display name for support: ") + name : Lang.L("عيّن اسمك الظاهر للدعم الفني", "Set your display name for support");
             nameButton.Invalidate();
         }
 
@@ -851,7 +863,7 @@ namespace Tahakkum
 
         void RemoveContact(Contact contact)
         {
-            DialogResult answer = MessageBox.Show(this, "حذف \"" + contact.Name + "\" من العناوين المحفوظة؟", "حذف عنوان", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2,
+            DialogResult answer = MessageBox.Show(this, "حذف \"" + contact.Name + "\" من العناوين المحفوظة؟", Lang.L("حذف عنوان", "Delete address"), MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2,
                 MessageBoxOptions.RightAlign | MessageBoxOptions.RtlReading);
             if (answer != DialogResult.Yes) return;
             ContactBook.Remove(contact.Address);
@@ -865,7 +877,7 @@ namespace Tahakkum
             if (server == null)
             {
                 hostDot.Color = Theme.Muted;
-                hostState.Text = "نسخة أخرى من البرنامج تستقبل الطلبات على هذا الجهاز.";
+                hostState.Text = Lang.L("نسخة أخرى من البرنامج تستقبل الطلبات على هذا الجهاز.", "Another copy of the program is accepting requests on this device.");
                 return;
             }
             try
@@ -877,7 +889,7 @@ namespace Tahakkum
             {
                 hostToggle.Checked = false;
                 hostDot.Color = Theme.Danger;
-                hostState.Text = "المنفذ " + Proto.DefaultPort + " مستخدم من برنامج آخر.";
+                hostState.Text = Lang.L("المنفذ ", "Port ") + Proto.DefaultPort + Lang.L(" مستخدم من برنامج آخر.", " is used by another program.");
                 return;
             }
             if (discovery != null)
@@ -886,11 +898,11 @@ namespace Tahakkum
                 else discovery.Stop();
             }
             hostDot.Color = hostToggle.Checked ? Theme.Success : Theme.Muted;
-            hostState.Text = hostToggle.Checked ? "جاهز لاستقبال الطلبات على المنفذ " + Proto.DefaultPort : "لا يستقبل طلبات تحكم";
+            hostState.Text = hostToggle.Checked ? Lang.L("جاهز لاستقبال الطلبات على المنفذ ", "Ready to accept requests on port ") + Proto.DefaultPort : Lang.L("لا يستقبل طلبات تحكم", "Not accepting control requests");
             if (hostToggle.Checked && !LicenseManager.IsValid)
             {
                 hostDot.Color = Theme.Warning;
-                hostState.Text = "لن تُقبل الطلبات قبل تفعيل البرنامج";
+                hostState.Text = Lang.L("لن تُقبل الطلبات قبل تفعيل البرنامج", "Requests won't be accepted until the program is activated");
             }
         }
 
@@ -927,16 +939,16 @@ namespace Tahakkum
             sessionBar.RefreshViewers();
             UpdateHostState();
             string who = session.DisplayName + " (" + session.RemoteIp + ")";
-            tray.ShowBalloonTip(4000, first ? "جلسة تحكم نشطة" : "انضم شخص إلى الجلسة",
-                (first ? "يتحكم بهذه الشاشة: " : "يشاهد الآن أيضاً: ") + who + "\nللإنهاء الفوري: Ctrl + Alt + Shift + Q", ToolTipIcon.Warning);
+            tray.ShowBalloonTip(4000, first ? Lang.L("جلسة تحكم نشطة", "Active control session") : Lang.L("انضم شخص إلى الجلسة", "Someone joined the session"),
+                (first ? Lang.L("يتحكم بهذه الشاشة: ", "Controlling this screen: ") : Lang.L("يشاهد الآن أيضاً: ", "Also watching now: ")) + who + Lang.L("\nللإنهاء الفوري: Ctrl + Alt + Shift + Q", "\nTo end immediately: Ctrl + Alt + Shift + Q"), ToolTipIcon.Warning);
         }
 
         void UpdateHostState()
         {
             hostDot.Color = Theme.Danger;
             hostState.Text = hostSessions.Count == 1
-                ? "جلسة تحكم نشطة من " + hostSessions[0].RemoteIp
-                : "جلسة نشطة: " + hostSessions.Count + " متصلين";
+                ? Lang.L("جلسة تحكم نشطة من ", "Active control session from ") + hostSessions[0].RemoteIp
+                : Lang.L("جلسة نشطة: ", "Active session: ") + hostSessions.Count + Lang.L(" متصلين", " connected");
         }
 
         void EndHostSession(HostSession session)
@@ -993,7 +1005,7 @@ namespace Tahakkum
                 bool present = RuleExists(FirewallRule) && RuleExists(DiscoveryRule);
                 OnUi(() =>
                 {
-                    firewallState.Text = present ? "الجدار الناري: البرنامج مسموح له" : "الجدار الناري: قد يمنع الطلبات الواردة";
+                    firewallState.Text = present ? Lang.L("الجدار الناري: البرنامج مسموح له", "Firewall: the program is allowed") : Lang.L("الجدار الناري: قد يمنع الطلبات الواردة", "Firewall: it may block incoming requests");
                     firewallState.ForeColor = present ? Theme.Text : Theme.Warning;
                     firewallButton.Visible = !present;
                 });
@@ -1107,12 +1119,12 @@ namespace Tahakkum
         void SetupTray()
         {
             tray.Icon = Program.AppIcon;
-            tray.Text = "تحكّم";
+            tray.Text = Lang.L("تحكّم", "Tahakkum");
             tray.Visible = true;
             ContextMenuStrip menu = Theme.MakeMenu();
             menu.ShowCheckMargin = false;
-            menu.Items.Add("فتح", null, delegate { RestoreFromTray(); });
-            menu.Items.Add("خروج", null, delegate { ExitApp(); });
+            menu.Items.Add(Lang.L("فتح", "Open"), null, delegate { RestoreFromTray(); });
+            menu.Items.Add(Lang.L("خروج", "Exit"), null, delegate { ExitApp(); });
             tray.ContextMenuStrip = menu;
             tray.DoubleClick += delegate { RestoreFromTray(); };
         }
@@ -1141,7 +1153,7 @@ namespace Tahakkum
                 if (!trayHintShown)
                 {
                     trayHintShown = true;
-                    tray.ShowBalloonTip(3000, "تحكّم ما زال يعمل", "يستقبل طلبات التحكم من أيقونة شريط المهام. للإغلاق التام: زر أيمن ثم خروج.", ToolTipIcon.Info);
+                    tray.ShowBalloonTip(3000, Lang.L("تحكّم ما زال يعمل", "Tahakkum is still running"), Lang.L("يستقبل طلبات التحكم من أيقونة شريط المهام. للإغلاق التام: زر أيمن ثم خروج.", "It's accepting control requests from the tray icon. To close completely: right-click then Exit."), ToolTipIcon.Info);
                 }
                 return;
             }

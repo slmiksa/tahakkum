@@ -312,15 +312,15 @@ namespace Tahakkum
         {
             string cleanName = Identity.Sanitize(name, MaxName).Trim();
             string cleanAddress = NormalizeAddress(address);
-            if (cleanName.Length == 0) return "اكتب اسم صاحب العنوان أو الجهاز.";
-            if (cleanAddress == null) return "اكتب عنوان IP صحيحاً أو معرّفاً من 9 أرقام.";
+            if (cleanName.Length == 0) return Lang.L("اكتب اسم صاحب العنوان أو الجهاز.", "Enter the address or device owner's name.");
+            if (cleanAddress == null) return Lang.L("اكتب عنوان IP صحيحاً أو معرّفاً من 9 أرقام.", "Enter a valid IP address or a 9-digit ID.");
             lock (gate)
             {
                 List<Contact> list = Read();
                 list.RemoveAll(c => string.Equals(c.Address, cleanAddress, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(c.Address, replacing, StringComparison.OrdinalIgnoreCase));
                 list.Add(new Contact { Name = cleanName, Address = cleanAddress });
-                return Write(list) ? null : "تعذر حفظ العنوان على هذا الجهاز.";
+                return Write(list) ? null : Lang.L("تعذر حفظ العنوان على هذا الجهاز.", "Couldn't save the address on this device.");
             }
         }
 
@@ -339,6 +339,84 @@ namespace Tahakkum
             try
             {
                 File.WriteAllLines(PathName, list.OrderBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase).Select(c => c.Name + "\t" + c.Address), new UTF8Encoding(false));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                if (ex is IOException || ex is UnauthorizedAccessException) return false;
+                throw;
+            }
+        }
+    }
+
+    sealed class TvDevice
+    {
+        public string Name;
+        public string Address;
+    }
+
+    // Saved Android TV addresses, so the person can reconnect without retyping the IP. Follows the
+    // Windows user, like the contacts list.
+    static class TvBook
+    {
+        public const int MaxName = 60;
+        static readonly object gate = new object();
+
+        static string PathName { get { return Path.Combine(AppFiles.Dir, "tv.txt"); } }
+
+        public static List<TvDevice> Load()
+        {
+            lock (gate) return Read();
+        }
+
+        static List<TvDevice> Read()
+        {
+            List<TvDevice> list = new List<TvDevice>();
+            try
+            {
+                if (File.Exists(PathName))
+                    foreach (string line in File.ReadAllLines(PathName, Encoding.UTF8))
+                    {
+                        int tab = line.IndexOf('\t');
+                        if (tab > 0 && tab < line.Length - 1)
+                            list.Add(new TvDevice { Name = line.Substring(0, tab), Address = line.Substring(tab + 1) });
+                    }
+            }
+            catch (Exception) { }
+            return list;
+        }
+
+        // Returns an error for the person, or null when saved. A name left empty becomes the address.
+        public static string Save(string name, string address)
+        {
+            string cleanAddress = (address ?? "").Trim();
+            if (!AdbTool.ValidHost(cleanAddress)) return Lang.L("اكتب عنوان IP صحيحاً للتلفزيون، مثل 192.168.1.40", "Enter a valid TV IP address, e.g. 192.168.1.40");
+            string cleanName = Identity.Sanitize(name, MaxName).Trim();
+            if (cleanName.Length == 0) cleanName = cleanAddress;
+            lock (gate)
+            {
+                List<TvDevice> list = Read();
+                list.RemoveAll(t => string.Equals(t.Address, cleanAddress, StringComparison.OrdinalIgnoreCase));
+                list.Add(new TvDevice { Name = cleanName, Address = cleanAddress });
+                return Write(list) ? null : Lang.L("تعذر حفظ العنوان على هذا الجهاز.", "Couldn't save the address on this device.");
+            }
+        }
+
+        public static void Remove(string address)
+        {
+            lock (gate)
+            {
+                List<TvDevice> list = Read();
+                list.RemoveAll(t => string.Equals(t.Address, address, StringComparison.OrdinalIgnoreCase));
+                Write(list);
+            }
+        }
+
+        static bool Write(List<TvDevice> list)
+        {
+            try
+            {
+                File.WriteAllLines(PathName, list.OrderBy(t => t.Name, StringComparer.CurrentCultureIgnoreCase).Select(t => t.Name + "\t" + t.Address), new UTF8Encoding(false));
                 return true;
             }
             catch (Exception ex)

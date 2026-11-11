@@ -34,7 +34,7 @@ namespace Tahakkum
         public AndroidForm(AdbTool tool, string host)
         {
             this.tool = tool;
-            Text = "تحكّم — شاشة أندرويد " + host;
+            Text = Lang.L("تحكّم — شاشة أندرويد ", "Tahakkum — Android screen ") + host;
             Icon = Program.AppIcon;
             BackColor = Theme.Bg;
             StartPosition = FormStartPosition.CenterScreen;
@@ -48,7 +48,7 @@ namespace Tahakkum
 
             surface.SetBounds(pad, pad, ClientSize.Width - panelW - 3 * pad, ClientSize.Height - 2 * pad);
             surface.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
-            surface.Overlay = "جارٍ جلب الصورة…";
+            surface.Overlay = Lang.L("جارٍ جلب الصورة…", "Fetching the image…");
             surface.MouseDown += OnSurfaceDown;
             surface.MouseMove += OnSurfaceMove;
             surface.MouseUp += OnSurfaceUp;
@@ -74,9 +74,9 @@ namespace Tahakkum
         {
             int cx = w / 2;
             int y = Theme.S(16);
-            Theme.MakeLabel("لوحة الريموت", Theme.UiBold(11f), Theme.Text, ContentAlignment.MiddleCenter);
+            Theme.MakeLabel(Lang.L("لوحة الريموت", "Remote panel"), Theme.UiBold(11f), Theme.Text, ContentAlignment.MiddleCenter);
 
-            Label title = Theme.MakeLabel("لوحة الريموت", Theme.UiBold(11f), Theme.Text, ContentAlignment.MiddleCenter);
+            Label title = Theme.MakeLabel(Lang.L("لوحة الريموت", "Remote panel"), Theme.UiBold(11f), Theme.Text, ContentAlignment.MiddleCenter);
             title.SetBounds(0, y, w, Theme.S(24));
             panel.Controls.Add(title);
 
@@ -91,16 +91,16 @@ namespace Tahakkum
             int ry = dy + 3 * (bs + Theme.S(6)) + Theme.S(10);
             int half = (w - Theme.S(36)) / 2;
             int gap = Theme.S(12);
-            AddKey(panel, "⟵ رجوع", Theme.S(12), ry, half, Theme.S(40), KBack);
-            AddKey(panel, "الرئيسية", Theme.S(12) + half + gap, ry, half, Theme.S(40), KHome);
-            AddKey(panel, "قائمة", Theme.S(12), ry + Theme.S(48), half, Theme.S(40), KMenu);
-            AddKey(panel, "التطبيقات", Theme.S(12) + half + gap, ry + Theme.S(48), half, Theme.S(40), KApps);
-            AddKey(panel, "صوت +", Theme.S(12), ry + Theme.S(96), half, Theme.S(40), KVolUp);
-            AddKey(panel, "صوت −", Theme.S(12) + half + gap, ry + Theme.S(96), half, Theme.S(40), KVolDown);
-            AddKey(panel, "تشغيل/إيقاف", Theme.S(12), ry + Theme.S(144), half, Theme.S(40), KPlay);
-            AddKey(panel, "الطاقة", Theme.S(12) + half + gap, ry + Theme.S(144), half, Theme.S(40), KPower);
+            AddKey(panel, Lang.L("⟵ رجوع", "⟵ Back"), Theme.S(12), ry, half, Theme.S(40), KBack);
+            AddKey(panel, Lang.L("الرئيسية", "Home"), Theme.S(12) + half + gap, ry, half, Theme.S(40), KHome);
+            AddKey(panel, Lang.L("قائمة", "Menu"), Theme.S(12), ry + Theme.S(48), half, Theme.S(40), KMenu);
+            AddKey(panel, Lang.L("التطبيقات", "Apps"), Theme.S(12) + half + gap, ry + Theme.S(48), half, Theme.S(40), KApps);
+            AddKey(panel, Lang.L("صوت +", "Vol +"), Theme.S(12), ry + Theme.S(96), half, Theme.S(40), KVolUp);
+            AddKey(panel, Lang.L("صوت −", "Vol −"), Theme.S(12) + half + gap, ry + Theme.S(96), half, Theme.S(40), KVolDown);
+            AddKey(panel, Lang.L("تشغيل/إيقاف", "Play/Pause"), Theme.S(12), ry + Theme.S(144), half, Theme.S(40), KPlay);
+            AddKey(panel, Lang.L("الطاقة", "Power"), Theme.S(12) + half + gap, ry + Theme.S(144), half, Theme.S(40), KPower);
 
-            PillButton text = new PillButton { Text = "كتابة نص…", Kind = ButtonKind.Secondary, Glyph = Theme.GlyphEdit, GlyphSize = 9f };
+            PillButton text = new PillButton { Text = Lang.L("كتابة نص…", "Type text…"), Kind = ButtonKind.Secondary, Glyph = Theme.GlyphEdit, GlyphSize = 9f };
             text.Font = Theme.UiBold(9f);
             text.SetBounds(Theme.S(12), ry + Theme.S(196), w - Theme.S(24), Theme.S(40));
             text.Click += delegate { TypeText(); };
@@ -137,8 +137,8 @@ namespace Tahakkum
                 if (png == null)
                 {
                     failures++;
-                    SetStatus(failures >= 3 ? "انقطع الاتصال بالتلفزيون. تأكد من تشغيله وتفعيل التصحيح عبر الشبكة." : "تعذّر جلب الصورة، إعادة المحاولة…");
-                    if (failures >= 3) surface.Overlay = "انقطع الاتصال";
+                    SetStatus(failures >= 3 ? Lang.L("انقطع الاتصال بالتلفزيون. تأكد من تشغيله وتفعيل التصحيح عبر الشبكة.", "The connection to the TV dropped. Make sure it's on and network debugging is enabled.") : Lang.L("تعذّر جلب الصورة، إعادة المحاولة…", "Couldn't fetch the image, retrying…"));
+                    if (failures >= 3) surface.Overlay = Lang.L("انقطع الاتصال", "Disconnected");
                     Sleep(1000);
                     continue;
                 }
@@ -158,7 +158,7 @@ namespace Tahakkum
                     }
                     if (old != null) old.Dispose();
                     BeginInvokeSafe(delegate { surface.Invalidate(); });
-                    SetStatus("متصل — يُحدَّث كل " + intervalMs + " مللي ثانية");
+                    SetStatus(Lang.L("متصل — يُحدَّث كل ", "Connected — refreshing every ") + intervalMs + Lang.L(" مللي ثانية", " ms"));
                 }
                 catch (Exception) { }
                 Sleep(intervalMs);
@@ -231,7 +231,7 @@ namespace Tahakkum
 
         void TypeText()
         {
-            using (TextPromptForm f = new TextPromptForm("اكتب النص المراد إرساله إلى التلفزيون:"))
+            using (TextPromptForm f = new TextPromptForm(Lang.L("اكتب النص المراد إرساله إلى التلفزيون:", "Type the text to send to the TV:")))
                 if (f.ShowDialog(this) == DialogResult.OK && f.Value.Length > 0)
                 {
                     string s = f.Value;
