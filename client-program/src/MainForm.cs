@@ -60,6 +60,7 @@ namespace Tahakkum
         readonly LockScreenLink lockLink;
         SessionBar sessionBar;
         ClipboardSync hostClipboard;
+        readonly List<string> localAddresses = new List<string>();
         int scanGeneration;
         bool exiting;
         bool firstVisible = true;
@@ -383,6 +384,10 @@ namespace Tahakkum
             }
             catch (Exception) { }
             List<string> all = withGateway.Concat(others).ToList();
+            // Every IPv4 of every active interface (enumeration needs no administrator rights), kept so
+            // the copy button can hand over all of them at once.
+            localAddresses.Clear();
+            localAddresses.AddRange(all);
             string id = relay != null ? relay.Id : null;
             if (id != null)
             {
@@ -525,7 +530,13 @@ namespace Tahakkum
 
         void CopyAddress()
         {
-            try { Clipboard.SetText(mainIp.Text); }
+            // On the internet relay, copy the device ID; otherwise copy every network address so the
+            // person can pick whichever one reaches this machine, regardless of their Windows account.
+            string payload;
+            if (relay != null && relay.Id != null) payload = relay.Id;
+            else if (localAddresses.Count > 0) payload = string.Join(Environment.NewLine, localAddresses.ToArray());
+            else payload = mainIp.Text;
+            try { Clipboard.SetText(payload); }
             catch (Exception) { }
         }
 

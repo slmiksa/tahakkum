@@ -305,6 +305,16 @@ namespace Tahakkum
             TopMost = true;
         }
 
+        // Keep the bar visible to the person at this machine, but out of the captured image the viewer
+        // sees — so it no longer covers the top of the remote view, while the consent indicator stays
+        // on the real screen. Falls back to WDA_MONITOR on Windows older than 10 v2004.
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            try { if (!Native.SetWindowDisplayAffinity(Handle, Native.WDA_EXCLUDEFROMCAPTURE)) Native.SetWindowDisplayAffinity(Handle, Native.WDA_MONITOR); }
+            catch (Exception) { }
+        }
+
         protected override bool ShowWithoutActivation { get { return true; } }
 
         protected override CreateParams CreateParams
@@ -340,12 +350,13 @@ namespace Tahakkum
         readonly Action<string> send;
         uint lastSequence;
         string lastText;
+        bool primed;
 
         public ClipboardSync(Action<string> send)
         {
             this.send = send;
             lastSequence = Native.GetClipboardSequenceNumber();
-            timer = new Timer { Interval = 700 };
+            timer = new Timer { Interval = 400 };
             timer.Tick += delegate { Poll(); };
             timer.Start();
         }
@@ -353,7 +364,10 @@ namespace Tahakkum
         void Poll()
         {
             uint seq = Native.GetClipboardSequenceNumber();
-            if (seq == lastSequence) return;
+            // The first tick always runs, so text copied before the session started is shared too;
+            // after that, only a real change is sent.
+            if (seq == lastSequence && primed) return;
+            primed = true;
             lastSequence = seq;
             try
             {

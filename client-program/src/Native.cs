@@ -155,6 +155,10 @@ namespace Tahakkum
         [DllImport("user32.dll")] public static extern bool SwitchDesktop(IntPtr desk);
         [DllImport("user32.dll")] public static extern bool CloseDesktop(IntPtr desk);
         [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
+        // Keeps a window out of screen captures while it stays visible on the real monitor.
+        public const uint WDA_MONITOR = 0x00000001;
+        public const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
+        [DllImport("user32.dll")] public static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint affinity);
         [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hwnd, int id, uint modifiers, uint vk);
         [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hwnd, int id);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern uint RegisterWindowMessage(string name);
