@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.80.0";
-import { handleIssue, importCodesKey } from "../_shared/core.ts";
+import { handleAddCodes, handleIssue, importCodesKey } from "../_shared/core.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": Deno.env.get("DASHBOARD_ORIGIN") ?? "*",
@@ -19,11 +19,16 @@ Deno.serve(async (req) => {
     auth: { persistSession: false },
   });
   try {
-    const result = await handleIssue(await req.json(), async (fn, args) => {
+    const input = await req.json();
+    const rpc = async (fn: string, args: Record<string, unknown>) => {
       const { data, error } = await db.rpc(fn, args);
       if (error) throw error;
       return data;
-    }, codesKey);
+    };
+    // With a batch_id, add codes to that batch; otherwise issue a new batch.
+    const result = input?.batch_id
+      ? await handleAddCodes(input, rpc, codesKey)
+      : await handleIssue(input, rpc, codesKey);
     return Response.json(result.body, { status: result.status, headers: cors });
   } catch (error) {
     console.error(error);

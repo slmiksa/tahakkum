@@ -207,6 +207,27 @@ export async function handleIssue(input: any, rpc: Rpc, codesKey: CryptoKey): Pr
   return { status: 200, body: { ok: true, batch, csv } };
 }
 
+// Adds more codes to an existing batch. The new codes inherit the batch's expiry; only they are
+// returned in the file, so the customer receives just the extra codes.
+export async function handleAddCodes(input: any, rpc: Rpc, codesKey: CryptoKey): Promise<Result> {
+  const quantity = Number(input?.quantity);
+  const batchId = String(input?.batch_id ?? "");
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_BATCH) return bad("bad_quantity");
+  if (!UUID_PATTERN.test(batchId)) return bad("bad_batch");
+
+  const codes = Array.from({ length: quantity }, generateCode);
+  const hashes = await Promise.all(codes.map((c) => sha256Hex(normalizeCode(c)!)));
+  const batch = await rpc("add_batch_codes", {
+    p_batch: batchId,
+    p_hashes: hashes,
+    p_hints: codes.map((c) => c.slice(-4)),
+    p_encrypted: await Promise.all(codes.map((c) => encryptCode(codesKey, c))),
+  });
+
+  const csv = buildCsv(batch, codes.map((code) => ({ code, used: false, revoked: false })));
+  return { status: 200, body: { ok: true, batch, csv } };
+}
+
 export function clientIp(headers: Headers): string {
   const forwarded = headers.get("x-forwarded-for") ?? "";
   return cleanText(forwarded.split(",")[0], 64) || "unknown";

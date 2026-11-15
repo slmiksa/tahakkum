@@ -62,6 +62,10 @@
       b.expires_at = new Date(Math.max(new Date(b.expires_at).getTime(), now) + a.p_months * 30 * 86400000).toISOString();
     },
     revoke_batch(a) { state.batch_overview.find((x) => x.id === a.p_batch).revoked_at = iso(0); },
+    delete_batch(a) {
+      state.batch_overview = state.batch_overview.filter((b) => b.id !== a.p_batch);
+      state.code_overview = state.code_overview.filter((r) => r.batch_id !== a.p_batch);
+    },
     revoke_code(a) { state.code_overview.find((x) => x.code_id === a.p_code).code_revoked_at = iso(0); },
     release_activation(a) {
       const c = state.code_overview.find((x) => x.activation_id === a.p_activation);
@@ -116,6 +120,12 @@
               return { data: { ok: true }, error: null };
             }
             return { data: { ok: true }, error: null };
+          }
+          if (name === "issue-batch" && body.batch_id) {
+            const b = state.batch_overview.find((x) => x.id === body.batch_id);
+            if (b) b.quantity += body.quantity;
+            const batch = { batch_id: body.batch_id, company: b ? b.company : "شركة", quantity: body.quantity, months: b ? b.months : 6, issued_at: iso(0), expires_at: b ? b.expires_at : iso(180) };
+            return { data: { ok: true, batch, csv: "code\r\nTKM-AAAAA-BBBBB-CCCCC-EEEEE\r\n" }, error: null };
           }
           const company = state.companies.find((c) => c.id === body.company_id);
           const batch = { batch_id: "b" + (state.batch_overview.length + 1), company: company.name, quantity: body.quantity, months: body.months, issued_at: iso(0), expires_at: iso(body.months * 30) };

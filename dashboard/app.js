@@ -329,8 +329,10 @@ function batchList(batches) {
         ltr(day(b.issued_at)), ltr(day(b.expires_at)), batchState(b), b.note || "—",
         el("td", { class: "actions" },
           el("button", { class: "tiny", onclick: () => exportBatch(b) }, "تصدير"),
+          !b.revoked_at && el("button", { class: "tiny", onclick: () => addCodes(b) }, "إضافة أكواد"),
           el("button", { class: "tiny", onclick: () => extendBatch(b) }, "تمديد"),
-          !b.revoked_at && el("button", { class: "tiny bad", onclick: () => revokeBatch(b) }, "إلغاء")),
+          !b.revoked_at && el("button", { class: "tiny bad", onclick: () => revokeBatch(b) }, "إلغاء"),
+          el("button", { class: "tiny bad", onclick: () => deleteBatch(b) }, "حذف")),
       ]), "لم تصدر أي دفعة بعد."),
   ];
 }
@@ -418,6 +420,33 @@ function exportBatch(b) {
       if (failed) throw await functionError(failed);
       if (!data.ok) throw new Error(data.error);
       saveFile(fileName({ company: data.batch.company, quantity: data.batch.quantity, issued_at: new Date().toISOString() }), data.csv);
+    });
+}
+
+// Generates extra codes for an existing batch, with the same expiry, and downloads just the new ones.
+function addCodes(b) {
+  const quantity = el("input", { type: "number", min: 1, max: 10000, value: 100 });
+  confirmDialog("إضافة أكواد",
+    "توليد أكواد جديدة لدفعة " + b.company + " بنفس تاريخ الانتهاء (" + day(b.expires_at) + ") وتنزيلها. الأكواد الحالية لا تتأثر.",
+    "إضافة وتنزيل",
+    async () => {
+      const { data, error: failed } = await db.functions.invoke("issue-batch", { body: { batch_id: b.id, quantity: Number(quantity.value) } });
+      if (failed) throw await functionError(failed);
+      if (!data.ok) throw new Error(data.error);
+      saveFile(fileName(data.batch), data.csv);
+      renderTab();
+    },
+    el("label", { style: "margin-top:14px" }, "عدد الأكواد الإضافية", quantity));
+}
+
+// Permanent delete: clears a batch and everything under it, to keep the list free of test batches.
+function deleteBatch(b) {
+  confirmDialog("حذف الدفعة نهائياً",
+    "سيُحذف نهائياً كل ما يخص دفعة " + b.company + " الصادرة في " + day(b.issued_at) + ": جميع أكوادها وأجهزتها المفعّلة. لا يمكن التراجع عن ذلك.",
+    "حذف الدفعة",
+    async () => {
+      must(await db.rpc("delete_batch", { p_batch: b.id }));
+      renderTab();
     });
 }
 
@@ -737,8 +766,10 @@ const ACTIONS = {
   create_company: "إضافة شركة",
   issue_batch: "إصدار دفعة",
   export_batch: "تصدير دفعة",
+  add_batch_codes: "إضافة أكواد لدفعة",
   extend_batch: "تمديد دفعة",
   revoke_batch: "إلغاء دفعة",
+  delete_batch: "حذف دفعة",
   revoke_code: "إلغاء كود",
   release_activation: "فك ارتباط جهاز",
   set_company_android: "تحكم أندرويد لشركة",

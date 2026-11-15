@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { before, test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
 import { addUser, asRole, newSigningKey, openDatabase, rpcAs } from "./harness.ts";
-import { badAdminCredentials, generateCode, handleActivate, handleExport, handleIssue as issueWith, handleRefresh, importCodesKey, importSigningKey, normalizeCode, sha256Hex } from "../supabase/functions/_shared/core.ts";
+import { badAdminCredentials, generateCode, handleActivate, handleAddCodes as addCodesWith, handleExport, handleIssue as issueWith, handleRefresh, importCodesKey, importSigningKey, normalizeCode, sha256Hex } from "../supabase/functions/_shared/core.ts";
 
 let db: PGlite;
 let key: CryptoKey;
@@ -10,6 +10,7 @@ let publicKey: CryptoKey;
 let adminClaims: object;
 let codesKey: CryptoKey;
 const handleIssue = (input: any, rpc: any) => issueWith(input, rpc, codesKey);
+const handleAddCodes = (input: any, rpc: any) => addCodesWith(input, rpc, codesKey);
 let admin: ReturnType<typeof rpcAs>;
 let company: string;
 const service = () => rpcAs(db, "service_role");
@@ -512,6 +513,44 @@ test("only the owner may create or delete a company-admin account", async () => 
   assert.equal((await db.query("select 1 from public.company_admins where user_id = $1", [target])).rows.length, 1);
   await admin("delete_company_admin", { p_user: target });
   assert.equal((await db.query("select 1 from public.company_admins where user_id = $1", [target])).rows.length, 0);
+});
+
+test("add_batch_codes appends working codes with the batch's expiry, owner only", async () => {
+  const { batch, codes } = await issue(2, 6);
+  const expiry = (await db.query<{ e: Date }>("select expires_at e from public.license_batches where id = $1", [batch.batch_id])).rows[0].e;
+
+  const r = await handleAddCodes({ batch_id: batch.batch_id, quantity: 3 }, admin);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const newCodes = (r.body.csv as string).split("\r\n").filter((l) => l.startsWith("\"TKM-")).map((l) => l.split(",")[0].replace(/"/g, ""));
+  assert.equal(newCodes.length, 3);
+
+  // The batch now holds all five codes, and its quantity reflects that.
+  assert.equal((await db.query<{ n: number }>("select count(*)::int n from public.license_codes where batch_id = $1", [batch.batch_id])).rows[0].n, 5);
+  assert.equal((await db.query<{ q: number }>("select quantity q from public.license_batches where id = $1", [batch.batch_id])).rows[0].q, 5);
+  // A new code activates and carries the same expiry as the original batch (it rides in the token).
+  const act = await activate(newCodes[0], "5".repeat(64));
+  assert.equal(act.body.ok, true, JSON.stringify(act.body));
+  assert.equal(Number(tokenFields(act.body.token as string)[3]), Math.floor(expiry.getTime() / 1000));
+  // The original codes are untouched.
+  assert.equal((await activate(codes[0], "6".repeat(64))).body.ok, true);
+
+  const plain = rpcAs(db, "authenticated", { sub: await addUser(db, false), aal: "aal2" });
+  await callDenied(plain, "add_batch_codes", { p_batch: batch.batch_id, p_hashes: ["h"], p_hints: ["h"], p_encrypted: ["e"] });
+  await assert.rejects(admin("add_batch_codes", { p_batch: "11111111-1111-1111-1111-111111111111", p_hashes: ["h"], p_hints: ["h"], p_encrypted: ["e"] }),
+    (e: { message?: string }) => /unknown_batch/.test(e.message ?? ""));
+});
+
+test("delete_batch removes the batch, its codes and activations, owner only", async () => {
+  const { batch, codes } = await issue(2, 6);
+  await activate(codes[0], "8".repeat(64));
+  const plain = rpcAs(db, "authenticated", { sub: await addUser(db, false), aal: "aal2" });
+  await callDenied(plain, "delete_batch", { p_batch: batch.batch_id });
+
+  await admin("delete_batch", { p_batch: batch.batch_id });
+  assert.equal((await db.query("select 1 from public.license_batches where id = $1", [batch.batch_id])).rows.length, 0);
+  assert.equal((await db.query("select 1 from public.license_codes where batch_id = $1", [batch.batch_id])).rows.length, 0);
+  assert.equal((await db.query<{ n: number }>("select count(*)::int n from public.activations a join public.license_codes k on k.id = a.code_id where k.batch_id = $1", [batch.batch_id])).rows[0].n, 0);
+  await assert.rejects(admin("delete_batch", { p_batch: batch.batch_id }), (e: { message?: string }) => /unknown_batch/.test(e.message ?? ""));
 });
 
 test("delete_company removes the company and everything under it, owner only", async () => {
