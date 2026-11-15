@@ -155,6 +155,7 @@ namespace Tahakkum
         [DllImport("user32.dll")] public static extern bool SwitchDesktop(IntPtr desk);
         [DllImport("user32.dll")] public static extern bool CloseDesktop(IntPtr desk);
         [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
+        public const uint DESKTOP_READOBJECTS = 0x0001;
         // Keeps a window out of screen captures while it stays visible on the real monitor.
         public const uint WDA_MONITOR = 0x00000001;
         public const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;

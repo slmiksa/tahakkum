@@ -620,13 +620,19 @@ namespace Tahakkum
             }
         }
 
-        static bool IsDesktopReachable()
+        // Whether the normal user desktop is the one receiving input, so an ordinary screen capture
+        // works. This only READS the input desktop's name; it never calls SwitchDesktop, which would
+        // actively pull the active desktop away from the lock/login screen and make it flicker
+        // between Winlogon and Default (the cause of the "can't type the password" problem). A locked
+        // session, a secure desktop that refuses to open, or any desktop other than "Default" all mean
+        // the normal desktop is not capturable — the SYSTEM agent serves the secure desktop instead.
+        static bool NormalDesktopActive()
         {
-            IntPtr desk = Native.OpenInputDesktop(0, false, 0x0100);
+            if (SessionWatch.Locked) return false;
+            IntPtr desk = Native.OpenInputDesktop(0, false, Native.DESKTOP_READOBJECTS);
             if (desk == IntPtr.Zero) return false;
-            bool ok = Native.SwitchDesktop(desk);
-            Native.CloseDesktop(desk);
-            return ok;
+            try { return string.Equals(LockLaunch.DesktopName(desk), "Default", StringComparison.OrdinalIgnoreCase); }
+            finally { Native.CloseDesktop(desk); }
         }
 
         void SendScreenInfo(Screen[] screens, int current, Rectangle bounds)
@@ -669,7 +675,7 @@ namespace Tahakkum
                     if (now - lastDesktopCheck >= 500)
                     {
                         lastDesktopCheck = now;
-                        bool reachable = IsDesktopReachable();
+                        bool reachable = NormalDesktopActive();
                         if (reachable == locked)
                         {
                             locked = !reachable;
