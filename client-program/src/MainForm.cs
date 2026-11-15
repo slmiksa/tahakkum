@@ -309,6 +309,7 @@ namespace Tahakkum
 
             NetworkChange.NetworkAddressChanged += OnNetworkChanged;
             SystemEvents.DisplaySettingsChanged += OnDisplaysChanged;
+            SystemEvents.SessionSwitch += OnSessionSwitch;
         }
 
         static Control At(Control c, int x, int y, int w, int h)
@@ -996,6 +997,14 @@ namespace Tahakkum
             foreach (HostSession s in hostSessions.ToArray()) s.NotifyDisplaysChanged();
         }
 
+        // Remember whether the machine is at the lock screen, so the host can tell a real lock apart
+        // from a UAC elevation prompt (a secure desktop while the session is still unlocked).
+        void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
+        {
+            if (e.Reason == SessionSwitchReason.SessionLock) SessionWatch.Locked = true;
+            else if (e.Reason == SessionSwitchReason.SessionUnlock) SessionWatch.Locked = false;
+        }
+
         // ---- system integration ----
 
         void CheckFirewallAsync()
@@ -1164,6 +1173,7 @@ namespace Tahakkum
         {
             NetworkChange.NetworkAddressChanged -= OnNetworkChanged;
             SystemEvents.DisplaySettingsChanged -= OnDisplaysChanged;
+            SystemEvents.SessionSwitch -= OnSessionSwitch;
             LicenseManager.Changed -= OnLicenseChanged;
             licenseTimer.Stop();
             licenseTimer.Dispose();

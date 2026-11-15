@@ -681,9 +681,15 @@ namespace Tahakkum
                     }
                     if (locked)
                     {
-                        // While locked, a password-authenticated viewer sees and drives the secure
-                        // desktop through the SYSTEM agent; everyone else just sees the locked notice.
-                        bool secure = byPassword && lockLink != null && lockLink.SecureActive;
+                        // The normal desktop is unreachable: either the machine is locked, or a secure
+                        // desktop (a UAC elevation prompt) is up. In both cases the SYSTEM agent can
+                        // follow it. Who may drive it:
+                        //  - a genuinely locked machine stays password-only — no on-machine consent
+                        //    exists at the lock screen;
+                        //  - a UAC prompt during an already-consented session is driven like the rest
+                        //    of that session, so the viewer can finish an install that asks for admin
+                        //    credentials (this is the common "screen dims and I can't type" case).
+                        bool secure = lockLink != null && lockLink.SecureActive && (byPassword || !SessionWatch.Locked);
                         if (secure) EnterSecure(); else ExitSecure();
                         Thread.Sleep(secure ? 120 : 200);
                         continue;
