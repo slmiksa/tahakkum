@@ -175,6 +175,8 @@ namespace Tahakkum
             end.Click += delegate { CloseByUser(); };
 
             files = new FileTransferService(conn, address);
+            // When this device is entitled, files the host sends are accepted without a prompt here.
+            files.AutoAccept = () => LicenseManager.AutoFileTransferAllowed;
             transfers = new FileTransferWindow(files, string.IsNullOrEmpty(hostName) ? address : hostName + " (" + address + ")");
             PillButton filesButton = AddTool(Lang.L("إرسال ملفات", "Send files"), Theme.GlyphFile, Theme.S(116), ButtonKind.Secondary);
             filesButton.Click += delegate { transfers.PickAndSend(this); };

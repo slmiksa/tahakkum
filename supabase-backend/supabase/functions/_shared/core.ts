@@ -49,12 +49,16 @@ export async function importSigningKey(privateJwk: JsonWebKey): Promise<CryptoKe
 }
 
 // v1|code id|device|expiry|issued|company[|flags]. The program verifies this offline with the
-// public key. The flags field was added later, so a token without it still parses; 'a' means the
-// device may control Android TV screens over IP.
-export async function signToken(key: CryptoKey, grant: { code_id: string; company: string; expires_at: string; server_time: string; android_control?: boolean }, device: string): Promise<string> {
+// public key. The flags field was added later, so a token without it still parses; the flags are
+// concatenated in one field: 'a' = may control Android TV screens over IP, 'f' = may transfer files
+// without the other side approving each one.
+export async function signToken(key: CryptoKey, grant: { code_id: string; company: string; expires_at: string; server_time: string; android_control?: boolean; auto_file_transfer?: boolean }, device: string): Promise<string> {
   const unix = (t: string) => Math.floor(new Date(t).getTime() / 1000);
   const fields = ["v1", grant.code_id, device, String(unix(grant.expires_at)), String(unix(grant.server_time)), base64Url(encoder.encode(grant.company))];
-  if (grant.android_control) fields.push("a");
+  let flags = "";
+  if (grant.android_control) flags += "a";
+  if (grant.auto_file_transfer) flags += "f";
+  if (flags) fields.push(flags);
   const payload = fields.join("|");
   const data = encoder.encode(payload);
   const signature = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, data));

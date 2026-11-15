@@ -125,6 +125,22 @@ namespace Tahakkum
             }
         }
 
+        // Whether this machine may transfer files without the person at the machine approving each
+        // transfer. Gated per company and per device from the dashboard, carried in the token
+        // (`AutoFileTransfer`). A local opt-in file is honoured too, for testing before the
+        // entitlement reaches the device.
+        public static bool AutoFileTransferAllowed
+        {
+            get
+            {
+                if (Required && !IsValid) return false;
+                LicenseToken t = Current;
+                if (t != null && t.AutoFileTransfer) return true;
+                try { return System.IO.File.Exists(System.IO.Path.Combine(AppFiles.MachineDir, "auto-files.on")); }
+                catch (Exception) { return false; }
+            }
+        }
+
         public static void Load()
         {
             if (!Required) return;

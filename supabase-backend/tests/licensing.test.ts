@@ -401,6 +401,49 @@ test("only an admin with MFA may toggle Android control", async () => {
   await callDenied(noMfa, "set_device_android", { p_activation: company, p_on: true });
 });
 
+test("auto file transfer rides in the token only when both the company and the device are allowed, alongside Android", async () => {
+  const { codes } = await issue(1, 6);
+  const first = await activate(codes[0], DEVICE_A);
+  const codeId = tokenFields(first.body.token as string)[1];
+  const activation = (await db.query<{ id: string }>(
+    "select id from public.activations where code_id = $1 and released_at is null", [codeId])).rows[0].id;
+  assert.equal(tokenFields(first.body.token as string).length, 6);
+
+  const refresh = () => handleRefresh({ code_id: codeId, device: DEVICE_A, secret: first.body.secret, machine: "PC-1" }, "x", service(), key);
+
+  // Company on but device off: still not allowed.
+  await admin("set_company_autofiles", { p_company: company, p_on: true });
+  assert.equal(tokenFields((await refresh()).body.token as string).length, 6);
+
+  // Device on as well: the token carries 'f', and still verifies.
+  await admin("set_device_autofiles", { p_activation: activation, p_on: true });
+  const token = (await refresh()).body.token as string;
+  const fields = tokenFields(token);
+  assert.equal(fields.length, 7);
+  assert.equal(fields[6], "f");
+  const decode = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+  const [payload, signature] = token.split(".");
+  assert.ok(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, publicKey, decode(signature), decode(payload)));
+
+  // Both features on at once: the flags field holds both letters, in a fixed order.
+  await admin("set_company_android", { p_company: company, p_on: true });
+  await admin("set_device_android", { p_activation: activation, p_on: true });
+  assert.equal(tokenFields((await refresh()).body.token as string)[6], "af");
+
+  // Turning the company off revokes auto file transfer while the device stays allowed.
+  await admin("set_company_autofiles", { p_company: company, p_on: false });
+  assert.equal(tokenFields((await refresh()).body.token as string)[6], "a");
+});
+
+test("only an admin with MFA may toggle auto file transfer", async () => {
+  const anon = rpcAs(db, "anon");
+  const user = rpcAs(db, "authenticated", { sub: await addUser(db, false), aal: "aal2" });
+  const noMfa = rpcAs(db, "authenticated", { ...adminClaims, aal: "aal1" });
+  await callDenied(anon, "set_company_autofiles", { p_company: company, p_on: true });
+  await callDenied(user, "set_company_autofiles", { p_company: company, p_on: true });
+  await callDenied(noMfa, "set_device_autofiles", { p_activation: company, p_on: true });
+});
+
 // ---- company administrators ----
 
 // Issues a batch for an arbitrary company (the shared issue() helper always uses the main company).
@@ -439,6 +482,11 @@ test("a company admin sees only their own company, grants TV per device, and rel
   await assert.rejects(ca("set_device_android", { p_activation: actB, p_on: true }), (e: { code?: string }) => e.code === "42501");
   await callDenied(ca, "set_company_android", { p_company: company, p_on: true });
 
+  // Same rules for auto file transfer: its own device yes, company B's no, the company switch no.
+  await ca("set_device_autofiles", { p_activation: actA, p_on: true });
+  await assert.rejects(ca("set_device_autofiles", { p_activation: actB, p_on: true }), (e: { code?: string }) => e.code === "42501");
+  await callDenied(ca, "set_company_autofiles", { p_company: company, p_on: true });
+
   // Releases its own device, not company B's.
   await assert.rejects(ca("release_activation", { p_activation: actB }), (e: { code?: string }) => e.code === "42501");
   await ca("release_activation", { p_activation: actA });
@@ -464,6 +512,29 @@ test("only the owner may create or delete a company-admin account", async () => 
   assert.equal((await db.query("select 1 from public.company_admins where user_id = $1", [target])).rows.length, 1);
   await admin("delete_company_admin", { p_user: target });
   assert.equal((await db.query("select 1 from public.company_admins where user_id = $1", [target])).rows.length, 0);
+});
+
+test("delete_company removes the company and everything under it, owner only", async () => {
+  const doomed = await admin("create_company", { p_name: "شركة للحذف", p_contact: "" }) as string;
+  const code = await issueFor(doomed);
+  const act = await activationId(await activate(code, "9".repeat(64)));
+  const caUser = await addUser(db, false);
+  await db.query("insert into public.company_admins (user_id, company_id, username) values ($1, $2, $3)", [caUser, doomed, "ca-doomed"]);
+
+  // A company admin of that company may not delete it.
+  await callDenied(rpcAs(db, "authenticated", { sub: caUser, aal: "aal2" }), "delete_company", { p_company: doomed });
+
+  const result = await admin("delete_company", { p_company: doomed }) as { company: string; admin_user_ids: string[] };
+  assert.equal(result.company, "شركة للحذف");
+  assert.deepEqual(result.admin_user_ids, [caUser]);
+
+  // Nothing of the company survives: company, batches, codes, the activation, and the admin row.
+  assert.equal((await db.query("select 1 from public.companies where id = $1", [doomed])).rows.length, 0);
+  assert.equal((await db.query("select 1 from public.license_batches where company_id = $1", [doomed])).rows.length, 0);
+  assert.equal((await db.query("select 1 from public.activations where id = $1", [act])).rows.length, 0);
+  assert.equal((await db.query("select 1 from public.company_admins where user_id = $1", [caUser])).rows.length, 0);
+
+  await assert.rejects(admin("delete_company", { p_company: doomed }), (e: { message?: string }) => /unknown_company/.test(e.message ?? ""));
 });
 
 test("company-admin credentials are validated before an account is created", () => {

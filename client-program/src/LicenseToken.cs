@@ -14,8 +14,10 @@ namespace Tahakkum
         public string Company;
         public DateTime ExpiresUtc;
         public DateTime IssuedUtc;
-        // Entitlement flags (optional 7th field). 'a' = may control Android TV screens over IP.
+        // Entitlement flags (optional 7th field), concatenated in one string: 'a' = may control
+        // Android TV screens over IP, 'f' = may transfer files without the other side approving each.
         public bool AndroidControl;
+        public bool AutoFileTransfer;
 
         // Returns null unless the signature is valid for this public key.
         public static LicenseToken Parse(string raw, string publicX, string publicY)
@@ -48,7 +50,8 @@ namespace Tahakkum
                     ExpiresUtc = epoch.AddSeconds(long.Parse(fields[3])),
                     IssuedUtc = epoch.AddSeconds(long.Parse(fields[4])),
                     Company = Encoding.UTF8.GetString(FromBase64Url(fields[5])),
-                    AndroidControl = fields.Length >= 7 && fields[6].IndexOf('a') >= 0
+                    AndroidControl = fields.Length >= 7 && fields[6].IndexOf('a') >= 0,
+                    AutoFileTransfer = fields.Length >= 7 && fields[6].IndexOf('f') >= 0
                 };
             }
             catch (Exception ex)

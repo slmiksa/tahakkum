@@ -88,6 +88,25 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    if (action === "delete-company") {
+      const companyId = String(input?.company_id ?? "");
+      if (!UUID.test(companyId)) return json({ ok: false, error: "bad_request" }, 400);
+      // Remove the company and everything under it under the owner's identity (audited, re-checked).
+      const { data, error: rowError } = await caller.rpc("delete_company", { p_company: companyId });
+      if (rowError) {
+        const denied = (rowError as { code?: string }).code === "42501";
+        const unknown = ((rowError as { message?: string }).message ?? "").includes("unknown_company");
+        return json({ ok: false, error: denied ? "not_admin" : unknown ? "unknown_company" : "server_error" },
+          denied ? 403 : unknown ? 404 : 500);
+      }
+      // Then delete the company admins' GoTrue logins; their rows are already gone.
+      const ids = ((data as { admin_user_ids?: string[] })?.admin_user_ids ?? []).filter((id) => UUID.test(id));
+      for (const id of ids) {
+        try { await admin.auth.admin.deleteUser(id); } catch (_e) { /* a stray login never blocks the delete */ }
+      }
+      return json({ ok: true, admins: ids.length });
+    }
+
     return json({ ok: false, error: "bad_request" }, 400);
   } catch (error) {
     console.error(error);

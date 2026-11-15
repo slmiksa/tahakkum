@@ -81,6 +81,9 @@ namespace Tahakkum
         bool shutDown;
 
         public Func<bool> OffersBlocked;
+        // When this returns true, an incoming offer is accepted automatically, without asking the
+        // person at this machine — the dashboard's per-device "auto file transfer" entitlement.
+        public Func<bool> AutoAccept;
         public event Action<FileOffer> OfferReceived;
         public event Action<FileTransfer> TransferStarted;
 
@@ -278,6 +281,14 @@ namespace Tahakkum
                 return;
             }
             AppFiles.Log("طلب إرسال ملفات من " + peer + ": " + string.Join("، ", offer.Names));
+            // A device with the auto-file-transfer entitlement accepts without asking its user.
+            Func<bool> auto = AutoAccept;
+            if (auto != null && auto())
+            {
+                AppFiles.Log("قبول تلقائي لملفات من " + peer + " (صلاحية نقل الملفات التلقائي)");
+                Accept(offer);
+                return;
+            }
             received(offer);
         }
 

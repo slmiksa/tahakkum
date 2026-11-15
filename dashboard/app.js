@@ -465,14 +465,14 @@ async function pageCompanies() {
       add.disabled = false;
     }
   });
-  function androidToggle(c) {
-    const btn = el("button", { class: "tiny" + (c.android_control ? " bad" : "") },
-      c.android_control ? "مفعّلة ✓" : "تفعيل");
+  // A company-level feature switch: rpc turns it on or off, the button shows the current state.
+  function featureToggle(c, rpc, on) {
+    const btn = el("button", { class: "tiny" + (on ? " bad" : "") }, on ? "مفعّلة ✓" : "تفعيل");
     btn.addEventListener("click", async () => {
       btn.disabled = true;
       error.textContent = "";
       try {
-        must(await db.rpc("set_company_android", { p_company: c.id, p_on: !c.android_control }));
+        must(await db.rpc(rpc, { p_company: c.id, p_on: !on }));
         renderTab();
       } catch (e) {
         error.textContent = errorText(e);
@@ -492,9 +492,27 @@ async function pageCompanies() {
       error),
     el("section", { class: "card" },
       el("div", { class: "head-row" }, el("h2", {}, "الشركات")),
-      el("p", { class: "muted small" }, "التحكم بشاشات أندرويد (TV) عبر IP: فعّله للشركة، ثم اختر الأجهزة المسموح لها من صفحة \"الأجهزة\"."),
-      table(["الاسم", "جهة التواصل", "شاشات أندرويد", "أضيفت في"],
-        companies.map((c) => [c.name, c.contact || "—", androidToggle(c), ltr(day(c.created_at))]), "لا توجد شركات بعد.")));
+      el("p", { class: "muted small" }, "الميزات تُفعَّل للشركة أولاً، ثم تُختار الأجهزة المسموح لها من صفحة \"الأجهزة\": شاشات أندرويد (TV) عبر IP، ونقل الملفات تلقائياً دون موافقة الطرف الآخر."),
+      table(["الاسم", "جهة التواصل", "شاشات أندرويد", "نقل ملفات تلقائي", "أضيفت في", ""],
+        companies.map((c) => [
+          c.name, c.contact || "—",
+          featureToggle(c, "set_company_android", c.android_control),
+          featureToggle(c, "set_company_autofiles", c.auto_file_transfer),
+          ltr(day(c.created_at)),
+          el("td", { class: "actions" }, el("button", { class: "tiny bad", onclick: () => deleteCompany(c) }, "حذف")),
+        ]), "لا توجد شركات بعد.")));
+}
+
+function deleteCompany(c) {
+  confirmDialog("حذف الشركة نهائياً",
+    "سيُحذف نهائياً كل ما يخص شركة " + c.name + ": جميع الدفعات والأكواد والأجهزة المفعّلة وحسابات مدرائها. لا يمكن التراجع عن ذلك.",
+    "حذف الشركة",
+    async () => {
+      const { data, error: failed } = await db.functions.invoke("admin-users", { body: { action: "delete-company", company_id: c.id } });
+      if (failed) throw await functionError(failed);
+      if (!data.ok) throw new Error(data.error);
+      renderTab();
+    });
 }
 
 // -- codes and devices --
@@ -516,25 +534,28 @@ async function pageDevices(scope) {
   const list = el("div");
   const err = el("p", { class: "danger small" });
 
-  function androidCell(c) {
+  // One per-device feature toggle. deviceOn/companyOn read the device and company flags for the
+  // feature; rpc flips the device flag. When the company feature is off the toggle has no effect
+  // yet: the owner can turn it on; a company admin asks the owner to enable it for the company first.
+  function featureCell(c, rpc, deviceOn, companyOn) {
     if (!c.activation_id) return "—";
-    const btn = el("button", { class: "tiny" + (c.device_android ? " bad" : "") }, c.device_android ? "مسموح ✓" : "سماح");
+    const btn = el("button", { class: "tiny" + (deviceOn ? " bad" : "") }, deviceOn ? "مسموح ✓" : "سماح");
     btn.addEventListener("click", async () => {
       btn.disabled = true;
       err.textContent = "";
       try {
-        must(await db.rpc("set_device_android", { p_activation: c.activation_id, p_on: !c.device_android }));
+        must(await db.rpc(rpc, { p_activation: c.activation_id, p_on: !deviceOn }));
         load();
       } catch (e) {
         err.textContent = errorText(e);
         btn.disabled = false;
       }
     });
-    // When the company feature is off the toggle has no effect yet: the owner can turn it on; a company
-    // admin must ask the owner (the provider) to enable it for the whole company first.
-    if (c.company_android) return btn;
+    if (companyOn) return btn;
     return el("span", {}, btn, el("span", { class: "muted small" }, scope ? " بانتظار تفعيل الشركة" : " فعّل للشركة"));
   }
+  const androidCell = (c) => featureCell(c, "set_device_android", c.device_android, c.company_android);
+  const autofilesCell = (c) => featureCell(c, "set_device_autofiles", c.device_autofiles, c.company_autofiles);
 
   async function load() {
     list.replaceChildren(el("p", { class: "muted" }, "جاري التحميل…"));
@@ -552,14 +573,14 @@ async function pageDevices(scope) {
       }
       // The owner column shows the company; a company admin already knows it, so that column is dropped.
       const headers = scope
-        ? ["الكود", "اسم الجهاز", "آخر IP", "آخر اتصال", "ينتهي", "الحالة", "تحكم TV", ""]
-        : ["الكود", "الشركة", "اسم الجهاز", "آخر IP", "آخر اتصال", "ينتهي", "الحالة", "تحكم أندرويد", ""];
+        ? ["الكود", "اسم الجهاز", "آخر IP", "آخر اتصال", "ينتهي", "الحالة", "تحكم TV", "نقل ملفات", ""]
+        : ["الكود", "الشركة", "اسم الجهاز", "آخر IP", "آخر اتصال", "ينتهي", "الحالة", "تحكم أندرويد", "نقل ملفات", ""];
       list.replaceChildren(table(headers,
         rows.map((c) => [
           ltr("…" + c.code_hint, "mono"),
           scope ? null : c.company,
           c.machine_name ? ltr(c.machine_name) : "—", c.last_ip ? ltr(c.last_ip) : "—",
-          ltr(dateTime(c.last_seen_at)), ltr(day(c.expires_at)), codeState(c), androidCell(c),
+          ltr(dateTime(c.last_seen_at)), ltr(day(c.expires_at)), codeState(c), androidCell(c), autofilesCell(c),
           el("td", { class: "actions" },
             c.activation_id && el("button", { class: "tiny", onclick: () => releaseDevice(c, load) }, "فك الارتباط"),
             !scope && !c.code_revoked_at && el("button", { class: "tiny bad", onclick: () => revokeCode(c, load) }, "إلغاء الكود")),
@@ -616,7 +637,7 @@ async function pageAdmins() {
   ]);
   content.replaceChildren(adminForm(companies), el("section", { class: "card" },
     el("div", { class: "head-row" }, el("h2", {}, "حسابات مدراء الشركات")),
-    el("p", { class: "muted small" }, "لكل حساب صلاحية شركة واحدة فقط: يرى أجهزتها، ويمنح تحكم TV لكل جهاز، ويفك ارتباط جهاز. ويُطلب منه إعداد التحقق بخطوتين عند أول دخول."),
+    el("p", { class: "muted small" }, "لكل حساب صلاحية شركة واحدة فقط: يرى أجهزتها، ويمنح لكل جهاز تحكم TV ونقل الملفات التلقائي، ويفك ارتباط جهاز. ويُطلب منه إعداد التحقق بخطوتين عند أول دخول."),
     table(["اسم المستخدم", "الشركة", "أضيف في", ""],
       admins.map((a) => [
         ltr(a.username, "mono"), a.company, ltr(day(a.created_at)),
@@ -675,7 +696,7 @@ async function refreshAdminList() {
   const admins = await db.from("company_admin_overview").select("*").order("created_at", { ascending: false }).then(must);
   content.lastElementChild.replaceChildren(
     el("div", { class: "head-row" }, el("h2", {}, "حسابات مدراء الشركات")),
-    el("p", { class: "muted small" }, "لكل حساب صلاحية شركة واحدة فقط: يرى أجهزتها، ويمنح تحكم TV لكل جهاز، ويفك ارتباط جهاز. ويُطلب منه إعداد التحقق بخطوتين عند أول دخول."),
+    el("p", { class: "muted small" }, "لكل حساب صلاحية شركة واحدة فقط: يرى أجهزتها، ويمنح لكل جهاز تحكم TV ونقل الملفات التلقائي، ويفك ارتباط جهاز. ويُطلب منه إعداد التحقق بخطوتين عند أول دخول."),
     table(["اسم المستخدم", "الشركة", "أضيف في", ""],
       admins.map((a) => [
         ltr(a.username, "mono"), a.company, ltr(day(a.created_at)),
@@ -722,6 +743,9 @@ const ACTIONS = {
   release_activation: "فك ارتباط جهاز",
   set_company_android: "تحكم أندرويد لشركة",
   set_device_android: "تحكم أندرويد لجهاز",
+  set_company_autofiles: "نقل ملفات تلقائي لشركة",
+  set_device_autofiles: "نقل ملفات تلقائي لجهاز",
+  delete_company: "حذف شركة",
   create_company_admin: "إضافة مدير شركة",
   delete_company_admin: "حذف مدير شركة",
   activate: "تفعيل جهاز",

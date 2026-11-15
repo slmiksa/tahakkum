@@ -407,6 +407,8 @@ namespace Tahakkum
             Files = new FileTransferService(conn, ip);
             // Nobody can answer a prompt on a locked machine, and pausing means the viewer should stop acting here.
             Files.OffersBlocked = () => paused || locked;
+            // When this device is entitled, incoming files are accepted without the person approving.
+            Files.AutoAccept = () => LicenseManager.AutoFileTransferAllowed;
         }
 
         public bool Paused { get { return paused; } }
