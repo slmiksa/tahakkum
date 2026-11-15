@@ -622,13 +622,13 @@ namespace Tahakkum
 
         // Whether the normal user desktop is the one receiving input, so an ordinary screen capture
         // works. This only READS the input desktop's name; it never calls SwitchDesktop, which would
-        // actively pull the active desktop away from the lock/login screen and make it flicker
-        // between Winlogon and Default (the cause of the "can't type the password" problem). A locked
-        // session, a secure desktop that refuses to open, or any desktop other than "Default" all mean
-        // the normal desktop is not capturable — the SYSTEM agent serves the secure desktop instead.
+        // actively pull the active desktop away from the lock/login screen and make it flicker between
+        // Winlogon and Default (the cause of the "can't type the password" problem). The normal
+        // desktop is "Default"; a secure desktop that refuses to open, or one named anything else
+        // (Winlogon), means the SYSTEM agent must serve it instead. The name alone decides, so the
+        // lock-screen clock (still the normal desktop) stays drivable until the real login appears.
         static bool NormalDesktopActive()
         {
-            if (SessionWatch.Locked) return false;
             IntPtr desk = Native.OpenInputDesktop(0, false, Native.DESKTOP_READOBJECTS);
             if (desk == IntPtr.Zero) return false;
             try { return string.Equals(LockLaunch.DesktopName(desk), "Default", StringComparison.OrdinalIgnoreCase); }
