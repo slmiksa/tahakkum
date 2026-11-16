@@ -141,6 +141,22 @@ namespace Tahakkum
             }
         }
 
+        // Whether this machine may connect to a phone (the one-tap USB flow). Owner-granted only
+        // from the dashboard — a company admin cannot turn it on — and carried in the token
+        // (`PhoneControl`). A local opt-in file is honoured too, for testing before the entitlement
+        // reaches the device.
+        public static bool PhoneControlAllowed
+        {
+            get
+            {
+                if (Required && !IsValid) return false;
+                LicenseToken t = Current;
+                if (t != null && t.PhoneControl) return true;
+                try { return System.IO.File.Exists(System.IO.Path.Combine(AppFiles.MachineDir, "phone-control.on")); }
+                catch (Exception) { return false; }
+            }
+        }
+
         public static void Load()
         {
             if (!Required) return;

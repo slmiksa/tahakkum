@@ -516,7 +516,7 @@ namespace Tahakkum
         void OpenAndroid()
         {
             if (!LicenseManager.IsValid && !OpenActivation()) return;
-            if (!LicenseManager.AndroidControlAllowed)
+            if (!LicenseManager.AndroidControlAllowed && !LicenseManager.PhoneControlAllowed)
             {
                 MessageBox.Show(this, Lang.L("ميزة التحكم بشاشات أندرويد غير مفعّلة لهذا الجهاز. تُفعَّل من لوحة التحكم.", "Android screen control isn't enabled for this device. It's enabled from the dashboard."), Lang.L("شاشة أندرويد", "Android screen"),
                     MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MessageBoxOptions.RightAlign | MessageBoxOptions.RtlReading);

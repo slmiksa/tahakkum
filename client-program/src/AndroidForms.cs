@@ -63,7 +63,9 @@ namespace Tahakkum
         readonly AddressBox ipBox = new AddressBox();
         readonly Label status;
         readonly PillButton connect;
+        readonly PillButton usbButton;
         readonly Panel savedPanel = new Panel();
+        readonly bool phoneAllowed;
         bool busy;
 
         public AdbTool Tool;
@@ -78,7 +80,7 @@ namespace Tahakkum
             StartPosition = FormStartPosition.CenterParent;
             BackColor = Theme.Bg;
             RightToLeft = Lang.Rtl;
-            ClientSize = new Size(Theme.S(480), Theme.S(506));
+            ClientSize = new Size(Theme.S(480), Theme.S(560));
             Icon = Program.AppIcon;
 
             int w = ClientSize.Width, m = Theme.S(24), inner = w - 2 * m;
@@ -87,14 +89,31 @@ namespace Tahakkum
             title.SetBounds(m, Theme.S(16), inner, Theme.S(28));
             Controls.Add(title);
 
-            Label note = Theme.MakeLabel(Lang.L("على التلفزيون مرة واحدة: فعّل \"خيارات المطور\" ثم \"تصحيح الأخطاء عبر الشبكة\". أول اتصال يظهر تنبيه سماح على التلفزيون، اضغط \"سماح\". ثم اكتب عنوان IP الظاهر في إعدادات الشبكة.", "On the TV once: enable \"Developer options\" then \"Network debugging\". The first connection shows an allow prompt on the TV — press \"Allow\". Then enter the IP address shown in the network settings."), Theme.Ui(9.5f), Theme.Muted, ContentAlignment.TopRight);
-            note.SetBounds(m, Theme.S(48), inner, Theme.S(80));
+            Label note = Theme.MakeLabel(Lang.L("على التلفزيون مرة واحدة: فعّل \"خيارات المطور\" ثم \"تصحيح الأخطاء عبر الشبكة\"، واكتب عنوان IP. للجوال: فعّل المطوّر وتصحيح أخطاء USB، وصّله بالكابل، ثم استخدم الزر أدناه.", "On the TV once: enable \"Developer options\" then \"Network debugging\", and enter the IP. For a phone: enable Developer options and USB debugging, plug it in by cable, then use the button below."), Theme.Ui(9.5f), Theme.Muted, ContentAlignment.TopRight);
+            note.SetBounds(m, Theme.S(48), inner, Theme.S(72));
             Controls.Add(note);
 
-            Label cap = Theme.MakeLabel(Lang.L("عنوان IP (مثال: 192.168.1.40)", "IP address (e.g. 192.168.1.40)"), Theme.Ui(9.5f), Theme.Muted, ContentAlignment.MiddleRight);
-            cap.SetBounds(m, Theme.S(132), inner, Theme.S(20));
+            // The phone-over-USB button is an owner-granted feature. When it isn't enabled from the
+            // dashboard the button stays visible but disabled, with a note; a company admin can never
+            // turn it on, only the dashboard owner.
+            phoneAllowed = LicenseManager.PhoneControlAllowed;
+            usbButton = new PillButton { Text = Lang.L("جوال عبر USB — تفعيل واتصال تلقائي", "Phone over USB — auto-enable & connect"), Kind = ButtonKind.Secondary };
+            usbButton.Font = Theme.UiBold(10f);
+            usbButton.SetBounds(m, Theme.S(124), inner, Theme.S(40));
+            usbButton.Enabled = phoneAllowed;
+            usbButton.Click += delegate { StartUsb(); };
+            Controls.Add(usbButton);
+
+            Label usbHint = Theme.MakeLabel(phoneAllowed
+                ? Lang.L("وصّل الجوال بـ USB ثم اضغط الزر: يفعّل الاتصال اللاسلكي ويتصل تلقائياً.", "Plug the phone in by USB, then press the button: it switches on wireless and connects.")
+                : Lang.L("التحكم بالجوال يفعّله مالك اللوحة من لوحة التحكم (ليس مدير الشركة).", "Phone control is enabled by the dashboard owner (not a company admin)."), Theme.Ui(8.5f), Theme.Muted, ContentAlignment.TopRight);
+            usbHint.SetBounds(m, Theme.S(166), inner, Theme.S(16));
+            Controls.Add(usbHint);
+
+            Label cap = Theme.MakeLabel(Lang.L("أو اكتب عنوان IP يدوياً (مثال: 192.168.1.40)", "Or enter an IP address manually (e.g. 192.168.1.40)"), Theme.Ui(9.5f), Theme.Muted, ContentAlignment.MiddleRight);
+            cap.SetBounds(m, Theme.S(190), inner, Theme.S(20));
             Controls.Add(cap);
-            ipBox.SetBounds(m, Theme.S(154), inner, Theme.S(48));
+            ipBox.SetBounds(m, Theme.S(212), inner, Theme.S(48));
             ipBox.Box.Font = Theme.UiBold(13f);
             ipBox.Box.RightToLeft = RightToLeft.No;
             ipBox.Box.MaxLength = 21;
@@ -104,30 +123,30 @@ namespace Tahakkum
 
             PillButton save = new PillButton { Text = Lang.L("حفظ هذا العنوان في القائمة", "Save this address to the list"), Kind = ButtonKind.Secondary, Glyph = Theme.GlyphCheck, GlyphSize = 9f };
             save.Font = Theme.UiBold(9.5f);
-            save.SetBounds(m, Theme.S(208), inner, Theme.S(32));
+            save.SetBounds(m, Theme.S(266), inner, Theme.S(32));
             save.Click += delegate { SaveCurrent(); };
             Controls.Add(save);
 
             status = Theme.MakeLabel("", Theme.Ui(9.5f), Theme.Muted, ContentAlignment.MiddleRight);
-            status.SetBounds(m, Theme.S(246), inner, Theme.S(34));
+            status.SetBounds(m, Theme.S(304), inner, Theme.S(34));
             Controls.Add(status);
 
-            Label savedCap = Theme.MakeLabel(Lang.L("التلفزيونات المحفوظة", "Saved TVs"), Theme.UiBold(10f), Theme.Text, ContentAlignment.MiddleRight);
-            savedCap.SetBounds(m, Theme.S(286), inner, Theme.S(22));
+            Label savedCap = Theme.MakeLabel(Lang.L("الأجهزة المحفوظة", "Saved devices"), Theme.UiBold(10f), Theme.Text, ContentAlignment.MiddleRight);
+            savedCap.SetBounds(m, Theme.S(344), inner, Theme.S(22));
             Controls.Add(savedCap);
 
-            savedPanel.SetBounds(m, Theme.S(312), inner, Theme.S(120));
+            savedPanel.SetBounds(m, Theme.S(370), inner, Theme.S(112));
             savedPanel.BackColor = Theme.Card;
             savedPanel.AutoScroll = true;
             Controls.Add(savedPanel);
 
             int bw = (inner - Theme.S(12)) / 2;
             connect = new PillButton { Text = Lang.L("اتصال", "Connect"), Kind = ButtonKind.Primary, Glyph = Theme.GlyphConnect, GlyphSize = 11f };
-            connect.SetBounds(w - m - bw, Theme.S(442), bw, Theme.S(48));
+            connect.SetBounds(w - m - bw, Theme.S(496), bw, Theme.S(48));
             connect.Click += delegate { Start(); };
             Controls.Add(connect);
             PillButton cancel = new PillButton { Text = Lang.L("إغلاق", "Close"), Kind = ButtonKind.Secondary };
-            cancel.SetBounds(m, Theme.S(442), bw, Theme.S(48));
+            cancel.SetBounds(m, Theme.S(496), bw, Theme.S(48));
             cancel.Click += delegate { if (!busy) Close(); };
             Controls.Add(cancel);
             CancelButton = cancel;
@@ -211,6 +230,7 @@ namespace Tahakkum
             }
             busy = true;
             connect.Enabled = false;
+            usbButton.Enabled = false;
             ipBox.Box.Enabled = false;
             status.ForeColor = Theme.Muted;
             status.Text = Lang.L("جاري الاتصال بـ ", "Connecting to ") + host + " …";
@@ -229,10 +249,72 @@ namespace Tahakkum
             t.Start();
         }
 
+        // One-tap phone setup over USB: find the cabled phone, switch it to wireless, read its IP,
+        // then connect over Wi-Fi with the normal flow.
+        void StartUsb()
+        {
+            if (busy || !phoneAllowed) return;
+            busy = true;
+            connect.Enabled = false;
+            usbButton.Enabled = false;
+            ipBox.Box.Enabled = false;
+            status.ForeColor = Theme.Muted;
+            status.Text = Lang.L("جاري تجهيز الجوال عبر USB…", "Preparing the phone over USB…");
+
+            Thread t = new Thread(delegate ()
+            {
+                string host = null, error = null;
+                if (!AdbTool.Available())
+                    error = Lang.L("أداة adb غير موجودة بجانب البرنامج.", "The adb tool isn't next to the program.");
+                else
+                {
+                    bool unauth;
+                    string serial = AdbTool.FindUsbSerial(out unauth);
+                    if (serial == null)
+                        error = unauth
+                            ? Lang.L("وافق على \"السماح بتصحيح USB\" على شاشة الجوال، ثم أعد المحاولة.", "Accept \"Allow USB debugging\" on the phone, then try again.")
+                            : Lang.L("لم يُعثر على جوال موصول بـ USB. وصّل الجوال وفعّل تصحيح أخطاء USB.", "No USB phone found. Connect the phone with USB debugging enabled.");
+                    else if (!AdbTool.EnableTcpip(serial))
+                        error = Lang.L("تعذّر تفعيل الاتصال اللاسلكي على الجوال. أعد المحاولة.", "Couldn't switch the phone to wireless. Try again.");
+                    else
+                    {
+                        Thread.Sleep(1500); // let adb restart in TCP mode before reading the address
+                        host = AdbTool.DeviceIp(serial);
+                        if (host == null)
+                            error = Lang.L("تعذّرت قراءة عنوان الجوال. تأكد من اتصاله بالواي فاي.", "Couldn't read the phone's IP. Make sure it's on Wi-Fi.");
+                    }
+                }
+                string fhost = host, ferror = error;
+                try { if (IsHandleCreated && !IsDisposed) BeginInvoke(new Action(delegate { UsbReady(fhost, ferror); })); }
+                catch (Exception) { }
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        void UsbReady(string host, string error)
+        {
+            busy = false;
+            connect.Enabled = true;
+            usbButton.Enabled = phoneAllowed;
+            ipBox.Box.Enabled = true;
+            if (error != null)
+            {
+                status.ForeColor = Theme.Warning;
+                status.Text = error;
+                return;
+            }
+            ipBox.Box.Text = host;
+            status.ForeColor = Theme.Success;
+            status.Text = Lang.L("تم تجهيز الجوال. يمكنك فصل USB الآن. جاري الاتصال…", "Phone ready. You can unplug USB now. Connecting…");
+            Start(); // connect wirelessly to the phone's IP
+        }
+
         void Finish(AdbTool.ConnectResult r, AdbTool tool, string host)
         {
             busy = false;
             connect.Enabled = true;
+            usbButton.Enabled = phoneAllowed;
             ipBox.Box.Enabled = true;
             switch (r)
             {

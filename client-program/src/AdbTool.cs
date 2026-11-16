@@ -86,6 +86,66 @@ namespace Tahakkum
             return ConnectResult.Unreachable;
         }
 
+        // ---- one-time USB setup, so a phone can be reached wirelessly like a TV ----
+
+        // The serial of a single phone connected by USB and ready. A serial with ':' is a network
+        // device, not USB. Reports an unauthorized device separately, so the person can accept the
+        // "Allow USB debugging" prompt on the phone.
+        public static string FindUsbSerial(out bool unauthorized)
+        {
+            unauthorized = false;
+            string outText, errText;
+            if (Run(Path(), "devices", 8000, out outText, out errText) != 0) return null;
+            string found = null;
+            foreach (string raw in outText.Replace("\r", "").Split('\n'))
+            {
+                string line = raw.Trim();
+                if (line.Length == 0 || line.StartsWith("List of devices")) continue;
+                string[] parts = line.Split(new[] { '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 2 || parts[0].IndexOf(':') >= 0) continue;
+                string state = parts[1].ToLowerInvariant();
+                if (state == "unauthorized") unauthorized = true;
+                else if (state == "device" && found == null) found = parts[0];
+            }
+            if (found != null) unauthorized = false;
+            return found;
+        }
+
+        // Switches that phone's adb to listen on TCP 5555, so it is reachable over Wi-Fi. This lasts
+        // until the phone reboots.
+        public static bool EnableTcpip(string serial)
+        {
+            if (!SafeSerial(serial)) return false;
+            string outText, errText;
+            int rc = Run(Path(), "-s " + serial + " tcpip 5555", 10000, out outText, out errText);
+            return rc == 0 && (outText + " " + errText).IndexOf("5555", StringComparison.Ordinal) >= 0;
+        }
+
+        // The phone's own Wi-Fi address, read from its routing table (the source of the default route),
+        // or null. Used to fill in the address for a wireless connection.
+        public static string DeviceIp(string serial)
+        {
+            if (!SafeSerial(serial)) return null;
+            string outText, errText;
+            if (Run(Path(), "-s " + serial + " shell ip route", 8000, out outText, out errText) == 0)
+            {
+                Match m = Regex.Match(outText, @"src\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})");
+                if (m.Success && m.Groups[1].Value != "127.0.0.1") return m.Groups[1].Value;
+            }
+            if (Run(Path(), "-s " + serial + " shell ip -f inet addr show wlan0", 8000, out outText, out errText) == 0)
+            {
+                Match m = Regex.Match(outText, @"inet\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})");
+                if (m.Success && m.Groups[1].Value != "127.0.0.1") return m.Groups[1].Value;
+            }
+            return null;
+        }
+
+        // A device serial only ever contains these characters, so it can never carry another argument.
+        static bool SafeSerial(string serial)
+        {
+            return !string.IsNullOrEmpty(serial) && Regex.IsMatch(serial, @"^[A-Za-z0-9._:-]+$");
+        }
+
         public string State()
         {
             string outText, errText;

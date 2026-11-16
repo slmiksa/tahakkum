@@ -521,12 +521,13 @@ async function pageCompanies() {
       error),
     el("section", { class: "card" },
       el("div", { class: "head-row" }, el("h2", {}, "الشركات")),
-      el("p", { class: "muted small" }, "الميزات تُفعَّل للشركة أولاً، ثم تُختار الأجهزة المسموح لها من صفحة \"الأجهزة\": شاشات أندرويد (TV) عبر IP، ونقل الملفات تلقائياً دون موافقة الطرف الآخر."),
-      table(["الاسم", "جهة التواصل", "شاشات أندرويد", "نقل ملفات تلقائي", "أضيفت في", ""],
+      el("p", { class: "muted small" }, "الميزات تُفعَّل للشركة أولاً، ثم تُختار الأجهزة المسموح لها من صفحة \"الأجهزة\": شاشات أندرويد (TV) عبر IP، ونقل الملفات تلقائياً دون موافقة الطرف الآخر، والتحكم بالجوال (USB). تحكم الجوال تمنحه أنت فقط، لا مدير الشركة."),
+      table(["الاسم", "جهة التواصل", "شاشات أندرويد", "نقل ملفات تلقائي", "تحكم الجوال", "أضيفت في", ""],
         companies.map((c) => [
           c.name, c.contact || "—",
           featureToggle(c, "set_company_android", c.android_control),
           featureToggle(c, "set_company_autofiles", c.auto_file_transfer),
+          featureToggle(c, "set_company_phone", c.phone_control),
           ltr(day(c.created_at)),
           el("td", { class: "actions" }, el("button", { class: "tiny bad", onclick: () => deleteCompany(c) }, "حذف")),
         ]), "لا توجد شركات بعد.")));
@@ -585,6 +586,9 @@ async function pageDevices(scope) {
   }
   const androidCell = (c) => featureCell(c, "set_device_android", c.device_android, c.company_android);
   const autofilesCell = (c) => featureCell(c, "set_device_autofiles", c.device_autofiles, c.company_autofiles);
+  // Phone control is owner only: the column and toggle exist only on the owner's devices page, never
+  // on a company admin's scoped view.
+  const phoneCell = (c) => featureCell(c, "set_device_phone", c.device_phone, c.company_phone);
 
   async function load() {
     list.replaceChildren(el("p", { class: "muted" }, "جاري التحميل…"));
@@ -603,13 +607,14 @@ async function pageDevices(scope) {
       // The owner column shows the company; a company admin already knows it, so that column is dropped.
       const headers = scope
         ? ["الكود", "اسم الجهاز", "آخر IP", "آخر اتصال", "ينتهي", "الحالة", "تحكم TV", "نقل ملفات", ""]
-        : ["الكود", "الشركة", "اسم الجهاز", "آخر IP", "آخر اتصال", "ينتهي", "الحالة", "تحكم أندرويد", "نقل ملفات", ""];
+        : ["الكود", "الشركة", "اسم الجهاز", "آخر IP", "آخر اتصال", "ينتهي", "الحالة", "تحكم أندرويد", "نقل ملفات", "تحكم جوال", ""];
       list.replaceChildren(table(headers,
         rows.map((c) => [
           ltr("…" + c.code_hint, "mono"),
           scope ? null : c.company,
           c.machine_name ? ltr(c.machine_name) : "—", c.last_ip ? ltr(c.last_ip) : "—",
           ltr(dateTime(c.last_seen_at)), ltr(day(c.expires_at)), codeState(c), androidCell(c), autofilesCell(c),
+          scope ? null : phoneCell(c),
           el("td", { class: "actions" },
             c.activation_id && el("button", { class: "tiny", onclick: () => releaseDevice(c, load) }, "فك الارتباط"),
             !scope && !c.code_revoked_at && el("button", { class: "tiny bad", onclick: () => revokeCode(c, load) }, "إلغاء الكود")),
@@ -776,6 +781,8 @@ const ACTIONS = {
   set_device_android: "تحكم أندرويد لجهاز",
   set_company_autofiles: "نقل ملفات تلقائي لشركة",
   set_device_autofiles: "نقل ملفات تلقائي لجهاز",
+  set_company_phone: "تحكم جوال لشركة",
+  set_device_phone: "تحكم جوال لجهاز",
   delete_company: "حذف شركة",
   create_company_admin: "إضافة مدير شركة",
   delete_company_admin: "حذف مدير شركة",

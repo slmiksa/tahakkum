@@ -9,8 +9,8 @@
     level: "aal1",
     factors: [],
     companies: [
-      { id: "c1", name: "شركة النور للتقنية", contact: "it@alnoor.example", created_at: iso(-90), android_control: true, auto_file_transfer: true },
-      { id: "c2", name: "مجموعة الرياض", contact: null, created_at: iso(-30), android_control: false, auto_file_transfer: false },
+      { id: "c1", name: "شركة النور للتقنية", contact: "it@alnoor.example", created_at: iso(-90), android_control: true, auto_file_transfer: true, phone_control: true },
+      { id: "c2", name: "مجموعة الرياض", contact: null, created_at: iso(-30), android_control: false, auto_file_transfer: false, phone_control: false },
     ],
     batch_overview: [
       { id: "b1", company_id: "c1", company: "شركة النور للتقنية", quantity: 1000, months: 6, note: "الفرع الرئيسي", issued_at: iso(-60), expires_at: iso(120), revoked_at: null, active_devices: 742, revoked_codes: 3 },
@@ -18,10 +18,10 @@
       { id: "b3", company_id: "c2", company: "مجموعة الرياض", quantity: 20, months: 1, note: "تجربة", issued_at: iso(-120), expires_at: iso(-90), revoked_at: null, active_devices: 20, revoked_codes: 0 },
     ],
     code_overview: [
-      { code_id: "k1", code_hint: "7KQ2", code_revoked_at: null, batch_id: "b1", expires_at: iso(120), batch_revoked_at: null, company_id: "c1", company: "شركة النور للتقنية", activation_id: "a1", machine_name: "DESK-1361", last_ip: "198.51.100.24", activated_at: iso(-50), last_seen_at: iso(-1), company_android: true, device_android: true, company_autofiles: true, device_autofiles: true },
+      { code_id: "k1", code_hint: "7KQ2", code_revoked_at: null, batch_id: "b1", expires_at: iso(120), batch_revoked_at: null, company_id: "c1", company: "شركة النور للتقنية", activation_id: "a1", machine_name: "DESK-1361", last_ip: "198.51.100.24", activated_at: iso(-50), last_seen_at: iso(-1), company_android: true, device_android: true, company_autofiles: true, device_autofiles: true, company_phone: true, device_phone: true },
       // A machine name written to attack the dashboard: it must show as plain text.
-      { code_id: "k2", code_hint: "M9XT", code_revoked_at: null, batch_id: "b1", expires_at: iso(120), batch_revoked_at: null, company_id: "c1", company: "شركة النور للتقنية", activation_id: "a2", machine_name: "<img src=x onerror=window.__xss=1>", last_ip: "198.51.100.25", activated_at: iso(-40), last_seen_at: iso(-2), company_android: true, device_android: false, company_autofiles: true, device_autofiles: false },
-      { code_id: "k3", code_hint: "P4DN", code_revoked_at: null, batch_id: "b1", expires_at: iso(120), batch_revoked_at: null, company_id: "c1", company: "شركة النور للتقنية", activation_id: null, machine_name: null, last_ip: null, activated_at: null, last_seen_at: null, company_android: true, device_android: false, company_autofiles: true, device_autofiles: false },
+      { code_id: "k2", code_hint: "M9XT", code_revoked_at: null, batch_id: "b1", expires_at: iso(120), batch_revoked_at: null, company_id: "c1", company: "شركة النور للتقنية", activation_id: "a2", machine_name: "<img src=x onerror=window.__xss=1>", last_ip: "198.51.100.25", activated_at: iso(-40), last_seen_at: iso(-2), company_android: true, device_android: false, company_autofiles: true, device_autofiles: false, company_phone: true, device_phone: false },
+      { code_id: "k3", code_hint: "P4DN", code_revoked_at: null, batch_id: "b1", expires_at: iso(120), batch_revoked_at: null, company_id: "c1", company: "شركة النور للتقنية", activation_id: null, machine_name: null, last_ip: null, activated_at: null, last_seen_at: null, company_android: true, device_android: false, company_autofiles: true, device_autofiles: false, company_phone: true, device_phone: false },
     ],
     audit_log: [
       { id: 2, action: "activate", subject: "k1", details: { company: "شركة النور للتقنية", machine: "DESK-1361", ip: "198.51.100.24" }, at: iso(-1) },
@@ -88,6 +88,15 @@
     set_device_autofiles(a) {
       const r = state.code_overview.find((x) => x.activation_id === a.p_activation);
       if (r) r.device_autofiles = a.p_on;
+    },
+    set_company_phone(a) {
+      const c = state.companies.find((x) => x.id === a.p_company);
+      if (c) c.phone_control = a.p_on;
+      state.code_overview.forEach((r) => { if (r.company_id === a.p_company) r.company_phone = a.p_on; });
+    },
+    set_device_phone(a) {
+      const r = state.code_overview.find((x) => x.activation_id === a.p_activation);
+      if (r) r.device_phone = a.p_on;
     },
     my_role() {
       if (previewAs === "company") return { owner: false, company_id: "c1", company: "شركة النور للتقنية" };

@@ -445,6 +445,48 @@ test("only an admin with MFA may toggle auto file transfer", async () => {
   await callDenied(noMfa, "set_device_autofiles", { p_activation: company, p_on: true });
 });
 
+test("phone control rides in the token only when both the company and the device are allowed", async () => {
+  const { codes } = await issue(1, 6);
+  const first = await activate(codes[0], DEVICE_A);
+  const codeId = tokenFields(first.body.token as string)[1];
+  const activation = (await db.query<{ id: string }>(
+    "select id from public.activations where code_id = $1 and released_at is null", [codeId])).rows[0].id;
+
+  const refresh = () => handleRefresh({ code_id: codeId, device: DEVICE_A, secret: first.body.secret, machine: "PC-1" }, "x", service(), key);
+
+  // Clear any feature left on by earlier tests so only phone control can show up in the flags.
+  await admin("set_company_android", { p_company: company, p_on: false });
+  await admin("set_company_autofiles", { p_company: company, p_on: false });
+  assert.equal(tokenFields((await refresh()).body.token as string).length, 6);
+
+  // Company on but device off: still not allowed.
+  await admin("set_company_phone", { p_company: company, p_on: true });
+  assert.equal(tokenFields((await refresh()).body.token as string).length, 6);
+
+  // Device on as well: the token carries 'p', and still verifies.
+  await admin("set_device_phone", { p_activation: activation, p_on: true });
+  const token = (await refresh()).body.token as string;
+  const fields = tokenFields(token);
+  assert.equal(fields.length, 7);
+  assert.equal(fields[6], "p");
+  const decode = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+  const [payload, signature] = token.split(".");
+  assert.ok(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, publicKey, decode(signature), decode(payload)));
+
+  // Turning the company off revokes it even while the device stays allowed.
+  await admin("set_company_phone", { p_company: company, p_on: false });
+  assert.equal(tokenFields((await refresh()).body.token as string).length, 6);
+});
+
+test("only an admin with MFA may toggle phone control", async () => {
+  const anon = rpcAs(db, "anon");
+  const user = rpcAs(db, "authenticated", { sub: await addUser(db, false), aal: "aal2" });
+  const noMfa = rpcAs(db, "authenticated", { ...adminClaims, aal: "aal1" });
+  await callDenied(anon, "set_company_phone", { p_company: company, p_on: true });
+  await callDenied(user, "set_company_phone", { p_company: company, p_on: true });
+  await callDenied(noMfa, "set_device_phone", { p_activation: company, p_on: true });
+});
+
 // ---- company administrators ----
 
 // Issues a batch for an arbitrary company (the shared issue() helper always uses the main company).
@@ -487,6 +529,10 @@ test("a company admin sees only their own company, grants TV per device, and rel
   await ca("set_device_autofiles", { p_activation: actA, p_on: true });
   await assert.rejects(ca("set_device_autofiles", { p_activation: actB, p_on: true }), (e: { code?: string }) => e.code === "42501");
   await callDenied(ca, "set_company_autofiles", { p_company: company, p_on: true });
+
+  // Phone control is owner only: a company admin cannot grant it even for its own device.
+  await callDenied(ca, "set_device_phone", { p_activation: actA, p_on: true });
+  await callDenied(ca, "set_company_phone", { p_company: company, p_on: true });
 
   // Releases its own device, not company B's.
   await assert.rejects(ca("release_activation", { p_activation: actB }), (e: { code?: string }) => e.code === "42501");
