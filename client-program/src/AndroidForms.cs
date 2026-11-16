@@ -80,7 +80,14 @@ namespace Tahakkum
             StartPosition = FormStartPosition.CenterParent;
             BackColor = Theme.Bg;
             RightToLeft = Lang.Rtl;
-            ClientSize = new Size(Theme.S(480), Theme.S(560));
+            // The phone-over-USB feature is owner-granted. When it isn't enabled from the dashboard,
+            // nothing about the phone is shown (no button, no hint, and the instructions mention only
+            // the TV), and the dialog shrinks by the height of the hidden button so there is no gap.
+            // A company admin can never enable it. The actual connection is enforced per device type
+            // in Finish(), so a disallowed phone can't be reached even by typing its IP.
+            phoneAllowed = LicenseManager.PhoneControlAllowed;
+            int yo = phoneAllowed ? 0 : 66; // how far the controls below the phone section move up
+            ClientSize = new Size(Theme.S(480), Theme.S(560 - yo));
             Icon = Program.AppIcon;
 
             int w = ClientSize.Width, m = Theme.S(24), inner = w - 2 * m;
@@ -89,31 +96,31 @@ namespace Tahakkum
             title.SetBounds(m, Theme.S(16), inner, Theme.S(28));
             Controls.Add(title);
 
-            Label note = Theme.MakeLabel(Lang.L("على التلفزيون مرة واحدة: فعّل \"خيارات المطور\" ثم \"تصحيح الأخطاء عبر الشبكة\"، واكتب عنوان IP. للجوال: فعّل المطوّر وتصحيح أخطاء USB، وصّله بالكابل، ثم استخدم الزر أدناه.", "On the TV once: enable \"Developer options\" then \"Network debugging\", and enter the IP. For a phone: enable Developer options and USB debugging, plug it in by cable, then use the button below."), Theme.Ui(9.5f), Theme.Muted, ContentAlignment.TopRight);
+            Label note = Theme.MakeLabel(phoneAllowed
+                ? Lang.L("على التلفزيون مرة واحدة: فعّل \"خيارات المطور\" ثم \"تصحيح الأخطاء عبر الشبكة\"، واكتب عنوان IP. للجوال: فعّل المطوّر وتصحيح أخطاء USB، وصّله بالكابل، ثم استخدم الزر أدناه.", "On the TV once: enable \"Developer options\" then \"Network debugging\", and enter the IP. For a phone: enable Developer options and USB debugging, plug it in by cable, then use the button below.")
+                : Lang.L("على التلفزيون مرة واحدة: فعّل \"خيارات المطور\" ثم \"تصحيح الأخطاء عبر الشبكة\"، ثم اكتب عنوان IP.", "On the TV once: enable \"Developer options\" then \"Network debugging\", then enter the IP."), Theme.Ui(9.5f), Theme.Muted, ContentAlignment.TopRight);
             note.SetBounds(m, Theme.S(48), inner, Theme.S(72));
             Controls.Add(note);
 
-            // The phone-over-USB button is an owner-granted feature. When it isn't enabled from the
-            // dashboard the button stays visible but disabled, with a note; a company admin can never
-            // turn it on, only the dashboard owner.
-            phoneAllowed = LicenseManager.PhoneControlAllowed;
+            // Created even when hidden so the field is never null (Start/Finish touch its Enabled).
             usbButton = new PillButton { Text = Lang.L("جوال عبر USB — تفعيل واتصال تلقائي", "Phone over USB — auto-enable & connect"), Kind = ButtonKind.Secondary };
             usbButton.Font = Theme.UiBold(10f);
-            usbButton.SetBounds(m, Theme.S(124), inner, Theme.S(40));
             usbButton.Enabled = phoneAllowed;
             usbButton.Click += delegate { StartUsb(); };
-            Controls.Add(usbButton);
+            if (phoneAllowed)
+            {
+                usbButton.SetBounds(m, Theme.S(124), inner, Theme.S(40));
+                Controls.Add(usbButton);
 
-            Label usbHint = Theme.MakeLabel(phoneAllowed
-                ? Lang.L("وصّل الجوال بـ USB ثم اضغط الزر: يفعّل الاتصال اللاسلكي ويتصل تلقائياً.", "Plug the phone in by USB, then press the button: it switches on wireless and connects.")
-                : Lang.L("التحكم بالجوال يفعّله مالك اللوحة من لوحة التحكم (ليس مدير الشركة).", "Phone control is enabled by the dashboard owner (not a company admin)."), Theme.Ui(8.5f), Theme.Muted, ContentAlignment.TopRight);
-            usbHint.SetBounds(m, Theme.S(166), inner, Theme.S(16));
-            Controls.Add(usbHint);
+                Label usbHint = Theme.MakeLabel(Lang.L("وصّل الجوال بـ USB ثم اضغط الزر: يفعّل الاتصال اللاسلكي ويتصل تلقائياً.", "Plug the phone in by USB, then press the button: it switches on wireless and connects."), Theme.Ui(8.5f), Theme.Muted, ContentAlignment.TopRight);
+                usbHint.SetBounds(m, Theme.S(166), inner, Theme.S(16));
+                Controls.Add(usbHint);
+            }
 
             Label cap = Theme.MakeLabel(Lang.L("أو اكتب عنوان IP يدوياً (مثال: 192.168.1.40)", "Or enter an IP address manually (e.g. 192.168.1.40)"), Theme.Ui(9.5f), Theme.Muted, ContentAlignment.MiddleRight);
-            cap.SetBounds(m, Theme.S(190), inner, Theme.S(20));
+            cap.SetBounds(m, Theme.S(190 - yo), inner, Theme.S(20));
             Controls.Add(cap);
-            ipBox.SetBounds(m, Theme.S(212), inner, Theme.S(48));
+            ipBox.SetBounds(m, Theme.S(212 - yo), inner, Theme.S(48));
             ipBox.Box.Font = Theme.UiBold(13f);
             ipBox.Box.RightToLeft = RightToLeft.No;
             ipBox.Box.MaxLength = 21;
@@ -123,30 +130,30 @@ namespace Tahakkum
 
             PillButton save = new PillButton { Text = Lang.L("حفظ هذا العنوان في القائمة", "Save this address to the list"), Kind = ButtonKind.Secondary, Glyph = Theme.GlyphCheck, GlyphSize = 9f };
             save.Font = Theme.UiBold(9.5f);
-            save.SetBounds(m, Theme.S(266), inner, Theme.S(32));
+            save.SetBounds(m, Theme.S(266 - yo), inner, Theme.S(32));
             save.Click += delegate { SaveCurrent(); };
             Controls.Add(save);
 
             status = Theme.MakeLabel("", Theme.Ui(9.5f), Theme.Muted, ContentAlignment.MiddleRight);
-            status.SetBounds(m, Theme.S(304), inner, Theme.S(34));
+            status.SetBounds(m, Theme.S(304 - yo), inner, Theme.S(34));
             Controls.Add(status);
 
             Label savedCap = Theme.MakeLabel(Lang.L("الأجهزة المحفوظة", "Saved devices"), Theme.UiBold(10f), Theme.Text, ContentAlignment.MiddleRight);
-            savedCap.SetBounds(m, Theme.S(344), inner, Theme.S(22));
+            savedCap.SetBounds(m, Theme.S(344 - yo), inner, Theme.S(22));
             Controls.Add(savedCap);
 
-            savedPanel.SetBounds(m, Theme.S(370), inner, Theme.S(112));
+            savedPanel.SetBounds(m, Theme.S(370 - yo), inner, Theme.S(112));
             savedPanel.BackColor = Theme.Card;
             savedPanel.AutoScroll = true;
             Controls.Add(savedPanel);
 
             int bw = (inner - Theme.S(12)) / 2;
             connect = new PillButton { Text = Lang.L("اتصال", "Connect"), Kind = ButtonKind.Primary, Glyph = Theme.GlyphConnect, GlyphSize = 11f };
-            connect.SetBounds(w - m - bw, Theme.S(496), bw, Theme.S(48));
+            connect.SetBounds(w - m - bw, Theme.S(496 - yo), bw, Theme.S(48));
             connect.Click += delegate { Start(); };
             Controls.Add(connect);
             PillButton cancel = new PillButton { Text = Lang.L("إغلاق", "Close"), Kind = ButtonKind.Secondary };
-            cancel.SetBounds(m, Theme.S(496), bw, Theme.S(48));
+            cancel.SetBounds(m, Theme.S(496 - yo), bw, Theme.S(48));
             cancel.Click += delegate { if (!busy) Close(); };
             Controls.Add(cancel);
             CancelButton = cancel;
@@ -239,9 +246,20 @@ namespace Tahakkum
             {
                 AdbTool tool;
                 AdbTool.ConnectResult r = AdbTool.Connect(host, out tool);
+                // Enforce the entitlement by what actually answered: a television needs TV control, a
+                // phone (anything not a TV) needs the owner-only phone control. A device the user is
+                // not allowed to reach is disconnected at once, so typing its IP changes nothing.
+                bool denied = false, isTv = false;
+                if (r == AdbTool.ConnectResult.Connected && tool != null)
+                {
+                    isTv = tool.IsTelevision();
+                    bool allow = isTv ? LicenseManager.AndroidControlAllowed : LicenseManager.PhoneControlAllowed;
+                    if (!allow) { tool.Disconnect(); tool = null; denied = true; }
+                }
+                bool fdenied = denied, fisTv = isTv;
                 try
                 {
-                    if (IsHandleCreated && !IsDisposed) BeginInvoke(new Action(delegate { Finish(r, tool, host); }));
+                    if (IsHandleCreated && !IsDisposed) BeginInvoke(new Action(delegate { Finish(r, tool, host, fdenied, fisTv); }));
                 }
                 catch (Exception) { }
             });
@@ -310,12 +328,20 @@ namespace Tahakkum
             Start(); // connect wirelessly to the phone's IP
         }
 
-        void Finish(AdbTool.ConnectResult r, AdbTool tool, string host)
+        void Finish(AdbTool.ConnectResult r, AdbTool tool, string host, bool denied, bool isTv)
         {
             busy = false;
             connect.Enabled = true;
             usbButton.Enabled = phoneAllowed;
             ipBox.Box.Enabled = true;
+            if (denied)
+            {
+                status.ForeColor = Theme.Warning;
+                status.Text = isTv
+                    ? Lang.L("التحكم بشاشات أندرويد (TV) غير مفعّل لهذا الجهاز. يُفعَّل من لوحة التحكم.", "Android TV control isn't enabled for this device. It's enabled from the dashboard.")
+                    : Lang.L("التحكم بالجوال غير مفعّل لهذا الجهاز. يفعّله مالك اللوحة من لوحة التحكم.", "Phone control isn't enabled for this device. The dashboard owner enables it.");
+                return;
+            }
             switch (r)
             {
                 case AdbTool.ConnectResult.Connected:

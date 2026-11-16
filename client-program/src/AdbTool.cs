@@ -146,6 +146,18 @@ namespace Tahakkum
             return !string.IsNullOrEmpty(serial) && Regex.IsMatch(serial, @"^[A-Za-z0-9._:-]+$");
         }
 
+        // Whether the connected device reports itself as a television (Android TV / leanback). Used to
+        // apply the right entitlement: TV control for a television, phone control for anything else.
+        // A device that does not clearly say it is a TV is treated as a phone, so the stricter
+        // owner-only phone grant is required for it.
+        public bool IsTelevision()
+        {
+            string outText, errText;
+            if (Run(Path(), "-s " + serial + " shell getprop ro.build.characteristics", 8000, out outText, out errText) == 0)
+                if (outText.ToLowerInvariant().IndexOf("tv") >= 0) return true;
+            return false;
+        }
+
         public string State()
         {
             string outText, errText;
